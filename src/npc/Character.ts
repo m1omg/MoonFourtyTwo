@@ -87,6 +87,11 @@ export class Character {
   frozen = false;
   /** Right hand holds something (mug); arm uses the table rest pose. */
   armOnTable = true;
+  /** Walking blend 0..1 and gait phase (radians, advance by distance travelled). */
+  walk = 0;
+  walkPhase = 0;
+  /** Left forearm raised to carry a tray. */
+  carryTray = false;
   private handProp: Object3D | null = null;
 
   constructor(gltf: GLTF) {
@@ -196,6 +201,24 @@ export class Character {
     for (const [key, deg] of blended) {
       const [b, a] = key.split('|') as [string, Axis];
       rots.push([b, a, deg]);
+    }
+    // walking: legs swing, arms counter-swing (phase is distance-driven by the caller)
+    if (this.walk > 0.01 && this.pose === 'stand') {
+      const w2 = this.walk;
+      const sp = Math.sin(this.walkPhase);
+      const cp = Math.cos(this.walkPhase);
+      rots.push(['LeftUpLeg', 'x', -sp * 24 * w2]);
+      rots.push(['RightUpLeg', 'x', sp * 24 * w2]);
+      rots.push(['LeftLeg', 'x', Math.max(0, cp) * 32 * w2]);
+      rots.push(['RightLeg', 'x', Math.max(0, -cp) * 32 * w2]);
+      if (!this.carryTray) rots.push(['LeftArm', 'x', sp * 14 * w2]);
+      rots.push(['RightArm', 'x', -sp * 14 * w2]);
+      rots.push(['Spine', 'y', sp * 3 * w2]);
+    }
+    if (this.carryTray) {
+      rots.push(['LeftArm', 'z', -30]);
+      rots.push(['LeftArm', 'x', -25]);
+      rots.push(['LeftForeArm', 'x', -80]);
     }
     // talking gestures
     if (this.talk > 0.01) {

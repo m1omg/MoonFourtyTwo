@@ -51,6 +51,32 @@ export function installTestApi(game: Game): void {
         flags: game.flags.toJSON(),
       };
     },
+    /** Uses an interactable by id (bypasses aiming). */
+    use(id: string): boolean {
+      const it = game.interactions.get(id);
+      if (!it || (it.enabled && !it.enabled())) return false;
+      it.onUse();
+      return true;
+    },
+    /** Picks the i-th option of the open choice menu. */
+    pick(i: number): boolean {
+      const b = document.querySelectorAll<HTMLButtonElement>('.choices button')[i];
+      if (!b) return false;
+      b.click();
+      return true;
+    },
+    get choosing(): boolean {
+      return game.ui.choosing;
+    },
+    setBac(v: number): void {
+      game.status.intox.set(v);
+    },
+    inventory(): Array<{ item: string | null; count: number }> {
+      return game.inventory.slots.map((s) => ({ item: s.item, count: s.count }));
+    },
+    subtitle(): string {
+      return document.querySelector('.subtitles')?.textContent ?? '';
+    },
     goto(id: string, cp?: string): Promise<void> {
       return game.startReality(id, cp, true);
     },

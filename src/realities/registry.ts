@@ -4,6 +4,7 @@ import type { RealityModule } from '../world/Reality.ts';
 export const REALITIES: Record<string, () => Promise<{ default: RealityModule }>> = {
   r0: () => import('./r00_test/index.ts'),
   r1: () => import('./r01_pub/index.ts'),
+  r3: () => import('./r03_hall/index.ts'),
 };
 
 export const REALITY_ORDER = ['r1'];
