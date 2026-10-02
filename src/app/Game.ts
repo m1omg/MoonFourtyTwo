@@ -1,4 +1,15 @@
-import { Color, PointLight, Scene, Vector3 } from 'three';
+import {
+  Color,
+  CylinderGeometry,
+  Group,
+  LatheGeometry,
+  Mesh,
+  MeshStandardMaterial,
+  PointLight,
+  Scene,
+  Vector2,
+  Vector3,
+} from 'three';
 import { GameLoop, SIM_DT } from '../core/loop.ts';
 import { Rng, freshSeed } from '../core/rng.ts';
 import { Scope } from '../core/scope.ts';
@@ -98,12 +109,18 @@ export class Game {
   /** Hooks for the current reality (cleared on unload). */
   onFootstep: ((e: FootstepEvent) => void) | null = null;
   onAction: ((a: string) => boolean) | null = null;
+  /** Called when the player tries to move while seated (stand up). */
+  onMoveWhileSeated: (() => void) | null = null;
 
   private noises: NoiseEvent[] = [];
   private scope: Scope | null = null;
   private tweens: Tween[] = [];
   private drinkTimer = 0;
+  private drinkDuration = 1;
   private drinkItem: ItemId | null = null;
+  /** First-person glass shown while drinking. */
+  private viewmodel = new Group();
+  private vmLiquid: Mesh;
   private skipRequested = false;
   private heartbeatTimer = 0;
   private lightObj: PointLight;
@@ -137,6 +154,29 @@ export class Game {
     this.rig = new CameraRig(this.renderer.camera, this.player);
     this.lightObj = new PointLight(0xffb060, 0, 7, 1.6);
     this.lightObj.castShadow = false;
+    {
+      const glass = new Mesh(
+        new LatheGeometry(
+          [new Vector2(0, 0), new Vector2(0.03, 0), new Vector2(0.033, 0.11), new Vector2(0.035, 0.115)],
+          18,
+        ),
+        new MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.05,
+          transparent: true,
+          opacity: 0.3,
+          depthWrite: false,
+        }),
+      );
+      this.vmLiquid = new Mesh(
+        new CylinderGeometry(0.029, 0.027, 0.08, 14),
+        new MeshStandardMaterial({ color: 0xd9a53a, roughness: 0.3, transparent: true, opacity: 0.85 }),
+      );
+      this.vmLiquid.position.y = 0.045;
+      this.viewmodel.add(glass, this.vmLiquid);
+      this.viewmodel.visible = false;
+      this.renderer.camera.add(this.viewmodel);
+    }
     this.loop = new GameLoop({ step: (dt) => this.step(dt), render: (a, fdt) => this.render(a, fdt) });
     this.input.attach(canvas);
     this.input.onPointerLockLost = () => {
@@ -316,6 +356,7 @@ export class Game {
       await Promise.race([Promise.allSettled(mats.pending), new Promise((r) => setTimeout(r, 15000))]);
       loading.progress(0.9);
       scene.add(this.lightObj);
+      scene.add(this.renderer.camera);
       this.renderer.setScene(scene);
       if (this.renderer.profile.ao) this.renderer.rebuild();
       try {
@@ -364,6 +405,10 @@ export class Game {
     this.world.clear();
     this.onFootstep = null;
     this.onAction = null;
+    this.onMoveWhileSeated = null;
+    this.onEon = null;
+    this.onSignal = null;
+    this.player.forcedHeight = null;
     this.tweens = [];
     this.seated = false;
     this.seatedWithDrink = false;
@@ -372,7 +417,7 @@ export class Game {
     this.player.frozen = false;
     this.ui.subtitle(null, null);
     this.ui.setPrompt(null);
-    if (this.scene) this.scene.remove(this.lightObj);
+    if (this.scene) this.scene.remove(this.lightObj, this.renderer.camera);
     this.renderer.setScene(null);
     this.scope?.dispose();
     this.scope = null;
@@ -508,6 +553,7 @@ export class Game {
     this.playSeconds += dt;
     const snap = this.input.snapshot();
     this.handleActions(snap);
+    if (this.seated && (Math.abs(snap.moveX) > 0.4 || Math.abs(snap.moveY) > 0.4)) this.onMoveWhileSeated?.();
 
     const st = this.status;
     const bac = st.intox.bac;
@@ -633,6 +679,11 @@ export class Game {
     const item = this.inventory.takeSelected()!;
     this.drinkItem = item;
     this.drinkTimer = ITEMS[item].kind === 'food' ? 1.4 : ITEMS[item].glass === 'mug' ? 2.2 : 1.1;
+    this.drinkDuration = this.drinkTimer;
+    (this.vmLiquid.material as MeshStandardMaterial).color.setHex(ITEMS[item].color);
+    this.viewmodel.scale.setScalar(
+      ITEMS[item].glass === 'mug' ? 1.3 : ITEMS[item].glass === 'shot' ? 0.6 : 1,
+    );
     this.synth.pour(this.drinkTimer * 0.8, undefined, true);
   }
 
@@ -801,6 +852,15 @@ export class Game {
         .add(_to.set(0.25, -0.2, -0.3).applyQuaternion(cam.quaternion));
       const flick = 0.85 + 0.15 * Math.sin(this.renderTime * 23.0) * Math.sin(this.renderTime * 7.3);
       this.lightObj.intensity = this.lightOn ? 2.2 * this.lightPower * flick : 0;
+      // first-person drinking
+      if (this.drinkTimer > 0 && this.drinkItem) {
+        const p = 1 - Math.max(0, this.drinkTimer - alpha * SIM_DT) / this.drinkDuration;
+        const up = Math.min(1, p * 2.2);
+        this.viewmodel.visible = ITEMS[this.drinkItem].kind === 'drink';
+        this.viewmodel.position.set(0.12 - 0.1 * up, -0.38 + 0.3 * up, -0.42 + 0.17 * up);
+        this.viewmodel.rotation.set(Math.max(0, p - 0.35) * 2.2, 0, -0.15 * (1 - up));
+        this.vmLiquid.scale.y = Math.max(0.05, 1 - Math.max(0, p - 0.45) * 1.8);
+      } else this.viewmodel.visible = false;
       this.applyPostFx();
       this.renderer.render(frameDt);
       this.audio.updateListener(cam);

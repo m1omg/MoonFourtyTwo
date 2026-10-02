@@ -14,6 +14,10 @@ export function installTestApi(game: Game): void {
     step(seconds: number, hz = 60): void {
       game.loop.manualFrames(Math.round(seconds * hz), hz);
     },
+    /** Simulates without rendering intermediate frames (much faster under software GL). */
+    sim(seconds: number): void {
+      game.loop.manualSim(seconds);
+    },
     frames(n: number, hz: number): void {
       game.loop.manualFrames(n, hz);
     },

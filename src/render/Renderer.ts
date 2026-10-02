@@ -1,7 +1,7 @@
 import {
   HalfFloatType,
   NoToneMapping,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   SRGBColorSpace,
   WebGLRenderer,
@@ -60,7 +60,8 @@ export class GameRenderer {
     });
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.renderer.toneMapping = NoToneMapping;
-    this.renderer.shadowMap.type = PCFSoftShadowMap;
+    this.renderer.shadowMap.type = PCFShadowMap;
+    this.renderer.info.autoReset = false;
     this.renderer.shadowMap.autoUpdate = true;
     this.camera = new PerspectiveCamera(72, 1, 0.05, 220);
     this.bloom = new BloomEffect({
@@ -146,6 +147,7 @@ export class GameRenderer {
   render(frameDt: number): void {
     if (!this.scene) return;
     this.drunkPass.enabled = this.drunk.active;
+    this.renderer.info.reset();
     this.composer.render(frameDt);
     if (this.dynamicRes) this.governResolution(frameDt);
   }

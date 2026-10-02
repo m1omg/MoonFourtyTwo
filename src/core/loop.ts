@@ -91,6 +91,13 @@ export class GameLoop {
     document.removeEventListener('visibilitychange', this.onVisibility);
   }
 
+  /** Advances the simulation by `seconds` without rendering, then renders one frame (fast tests). */
+  manualSim(seconds: number): void {
+    const n = Math.round(seconds / this.stepper.dt);
+    for (let i = 0; i < n; i++) this.stepper.advance(this.stepper.dt, this.handlers.step);
+    this.handlers.render(this.stepper.alpha, this.stepper.dt);
+  }
+
   /** Drives `count` frames of 1/hz seconds synchronously (deterministic tests). */
   manualFrames(count: number, hz: number): void {
     const dt = 1 / hz;

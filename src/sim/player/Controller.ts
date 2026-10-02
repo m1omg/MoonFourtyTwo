@@ -91,6 +91,8 @@ export class PlayerController {
   /** Frozen players (dialogue, cutscenes) ignore movement input but still fall. */
   frozen = false;
   noclip = false;
+  /** Overrides the capsule height (e.g. sitting). */
+  forcedHeight: number | null = null;
 
   constructor(
     private readonly world: CollisionWorld,
@@ -121,7 +123,8 @@ export class PlayerController {
     const wantCrouch = input.crouch && !this.frozen;
     if (wantCrouch) this.crouched = true;
     else if (this.crouched && this.hasHeadroom()) this.crouched = false;
-    this.height = damp(this.height, this.crouched ? c.crouchHeight : c.standHeight, 14, dt);
+    const targetH = this.forcedHeight ?? (this.crouched ? c.crouchHeight : c.standHeight);
+    this.height = damp(this.height, targetH, this.forcedHeight !== null ? 6 : 14, dt);
 
     // Desired horizontal velocity.
     const moving = !this.frozen && (input.moveX !== 0 || input.moveY !== 0);
