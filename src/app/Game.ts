@@ -1,0 +1,859 @@
+import { Color, PointLight, Scene, Vector3 } from 'three';
+import { GameLoop, SIM_DT } from '../core/loop.ts';
+import { Rng, freshSeed } from '../core/rng.ts';
+import { Scope } from '../core/scope.ts';
+import { clamp, damp } from '../core/damp.ts';
+import { InputManager } from '../input/InputManager.ts';
+import type { InputSnapshot } from '../input/actions.ts';
+import { TouchControls } from '../input/touch/TouchControls.ts';
+import { UI } from '../ui/UI.ts';
+import { t } from '../i18n/sk.ts';
+import { AudioSystem } from '../audio/Audio.ts';
+import { Synth } from '../audio/procedural/synth.ts';
+import { AssetLoader } from '../assets/Loader.ts';
+import { GameRenderer } from '../render/Renderer.ts';
+import { CameraRig } from '../render/CameraRig.ts';
+import { detectTier, type QualityTier } from '../render/quality.ts';
+import { NEUTRAL_GRADE, type GradeParams } from '../render/post/GradeEffect.ts';
+import { CollisionWorld, Layer } from '../sim/physics/CollisionWorld.ts';
+import { PlayerController, type FootstepEvent } from '../sim/player/Controller.ts';
+import { PlayerStatus, type StatusEvent } from '../sim/status/PlayerStatus.ts';
+import { BAC_DRUNK, BAC_TIPSY, BAC_WASTED } from '../sim/status/Intoxication.ts';
+import { Inventory } from '../sim/items/Inventory.ts';
+import { ITEMS, type ItemId } from '../sim/items/items.data.ts';
+import { Interactions } from '../sim/interaction/Interactions.ts';
+import { ScriptClock, Flags, runScript } from '../sim/narrative/ScriptRunner.ts';
+import type { Entity } from '../sim/ai/Entity.ts';
+import type { AIContext, NoiseEvent, PlayerView } from '../sim/ai/types.ts';
+import type { NavGrid } from '../sim/ai/nav/NavGrid.ts';
+import { Builder } from '../world/kit/Builder.ts';
+import { MaterialLib } from '../world/materials.ts';
+import type { RealityInstance, RealityModule } from '../world/Reality.ts';
+import { REALITIES, REALITY_ORDER, realityExists } from '../realities/registry.ts';
+import { loadSettings, saveSettings, type Settings } from '../save/Settings.ts';
+import { clearSave, loadSave, writeSave, type SaveData } from '../save/SaveGame.ts';
+import type { DebugOptions } from './debug.ts';
+
+const _look = new Vector3();
+const _eye = new Vector3();
+const _to = new Vector3();
+
+type Mode = 'boot' | 'title' | 'loading' | 'play' | 'okno' | 'ending';
+
+interface Tween {
+  key: keyof Game['fx'];
+  from: number;
+  to: number;
+  dur: number;
+  t: number;
+  resolve: () => void;
+}
+
+/** Owns every system and runs the fixed-step simulation and the render loop. */
+export class Game {
+  readonly settings: Settings;
+  readonly renderer: GameRenderer;
+  readonly loop: GameLoop;
+  readonly input = new InputManager();
+  readonly ui: UI;
+  touch: TouchControls | null = null;
+  readonly audio = new AudioSystem();
+  readonly synth: Synth;
+  readonly loader: AssetLoader;
+  rng: Rng;
+  readonly world = new CollisionWorld();
+  readonly player: PlayerController;
+  readonly rig: CameraRig;
+  readonly status = new PlayerStatus();
+  readonly inventory = new Inventory();
+  readonly interactions = new Interactions();
+  readonly clock = new ScriptClock();
+  readonly flags = new Flags();
+  entities: Entity[] = [];
+  nav: NavGrid | null = null;
+  scene: Scene | null = null;
+  reality: RealityInstance | null = null;
+  realityId = '';
+  realityModule: RealityModule | null = null;
+  checkpoint = '';
+  mode: Mode = 'boot';
+  /** Visual effect controls (scripts tween these on sim time). */
+  readonly fx = { fade: 1, white: 0, shake: 0, frost: 0, warp: 0, vignette: 0, desat: 0 };
+  grade: GradeParams = NEUTRAL_GRADE;
+  /** Lighter / flashlight. */
+  hasLight = false;
+  lightOn = false;
+  lightPower = 1;
+  /** Player is sitting (camera lowered, movement locked until they stand up). */
+  seated = false;
+  seatedWithDrink = false;
+  hiddenIn: PlayerView['hidden'] = null;
+  hiddenWitnessed = false;
+  /** Collected beer mats and tally count. */
+  mats: string[] = [];
+  tallies = 0;
+  playSeconds = 0;
+  renderTime = 0;
+  readonly debug: DebugOptions;
+  /** Hooks for the current reality (cleared on unload). */
+  onFootstep: ((e: FootstepEvent) => void) | null = null;
+  onAction: ((a: string) => boolean) | null = null;
+
+  private noises: NoiseEvent[] = [];
+  private scope: Scope | null = null;
+  private tweens: Tween[] = [];
+  private drinkTimer = 0;
+  private drinkItem: ItemId | null = null;
+  private skipRequested = false;
+  private heartbeatTimer = 0;
+  private lightObj: PointLight;
+  private statsEl: HTMLElement | null = null;
+  private statsTimer = 0;
+  private frames = 0;
+  private lastTier: QualityTier;
+  private aiCtx: AIContext;
+  private builder: Builder | null = null;
+  private loadingBusy = false;
+  private pauseOpen = false;
+
+  constructor(
+    readonly canvas: HTMLCanvasElement,
+    uiRoot: HTMLElement,
+    debug: DebugOptions,
+  ) {
+    this.debug = debug;
+    this.settings = loadSettings();
+    this.rng = new Rng(debug.seed ?? freshSeed());
+    const probe = canvas.getContext('webgl2');
+    const tier: QualityTier =
+      debug.quality ?? (this.settings.quality === 'auto' ? detectTier(probe) : this.settings.quality);
+    this.lastTier = tier;
+    this.renderer = new GameRenderer(canvas, tier);
+    if (debug.test) this.renderer.dynamicRes = false;
+    this.loader = new AssetLoader(this.renderer.renderer);
+    this.ui = new UI(uiRoot);
+    this.synth = new Synth(this.audio, this.rng.fork(7));
+    this.player = new PlayerController(this.world);
+    this.rig = new CameraRig(this.renderer.camera, this.player);
+    this.lightObj = new PointLight(0xffb060, 0, 7, 1.6);
+    this.lightObj.castShadow = false;
+    this.loop = new GameLoop({ step: (dt) => this.step(dt), render: (a, fdt) => this.render(a, fdt) });
+    this.input.attach(canvas);
+    this.input.onPointerLockLost = () => {
+      if (this.mode === 'play' && !this.ui.modal && !this.ui.choosing) void this.openPause();
+    };
+    const touchCapable = (navigator.maxTouchPoints ?? 0) > 0 && matchMedia('(pointer: coarse)').matches;
+    if (touchCapable) {
+      this.touch = new TouchControls(uiRoot, this.input);
+      this.ui.touchMode = true;
+      this.audio.setHrtf(false);
+    }
+    this.applySettings();
+    if (debug.stats) {
+      this.statsEl = document.createElement('div');
+      this.statsEl.style.cssText =
+        'position:fixed;left:8px;bottom:8px;font:12px monospace;color:#cfc;z-index:9;pointer-events:none;white-space:pre';
+      document.body.append(this.statsEl);
+    }
+    window.addEventListener('resize', () => this.renderer.resize());
+    this.aiCtx = this.makeAIContext();
+    this.renderer.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.ui.toast(t('updated'));
+      setTimeout(() => location.reload(), 800);
+    });
+  }
+
+  // ───────────────────────────── settings ─────────────────────────────
+
+  applySettings(): void {
+    const s = this.settings;
+    this.input.look.mouseSensitivity = 0.0022 * s.mouseSensitivity;
+    this.input.look.touchSensitivity = 0.0045 * s.touchSensitivity;
+    this.input.look.invertY = s.invertY;
+    this.renderer.camera.fov = s.fov;
+    this.renderer.camera.updateProjectionMatrix();
+    this.audio.setVolume('master', s.master);
+    this.audio.setVolume('music', s.music);
+    this.audio.setVolume('voice', s.voice);
+    this.audio.setVolume('sfx', s.sfx);
+    this.audio.setVolume('ambience', s.sfx);
+    this.ui.applySettings(s);
+    if (!this.debug.quality) {
+      const tier = s.quality === 'auto' ? this.lastTier : s.quality;
+      if (tier !== this.renderer.profile.tier) {
+        this.renderer.setProfile(tier);
+        if (this.scene) this.renderer.setScene(this.scene);
+        this.renderer.rebuild();
+      }
+    }
+    saveSettings(s);
+  }
+
+  openSettings = async (): Promise<void> => {
+    await this.ui.showSettings(this.settings, () => this.applySettings());
+  };
+
+  // ───────────────────────────── boot / menus ─────────────────────────────
+
+  async boot(): Promise<void> {
+    this.loop.manual = !!this.debug.test;
+    if (this.debug.test) this.audio.muted = true;
+    this.loop.start();
+    if (this.debug.quick && this.debug.reality && realityExists(this.debug.reality)) {
+      if (!this.debug.test) await this.ui.waitForClick();
+      this.audio.unlock();
+      if (this.debug.bac) this.status.intox.set(this.debug.bac);
+      await this.startReality(this.debug.reality, this.debug.checkpoint, true);
+      return;
+    }
+    if (!this.settings.warned) {
+      await this.ui.showWarning();
+      this.settings.warned = true;
+      saveSettings(this.settings);
+    }
+    this.audio.unlock();
+    await this.titleScreen();
+  }
+
+  async titleScreen(): Promise<void> {
+    this.mode = 'title';
+    this.ui.setHudVisible(false);
+    this.touch?.setVisible(false);
+    this.input.exitPointerLock();
+    const save = loadSave();
+    const choice = await this.ui.showTitle(!!save, this.openSettings);
+    this.audio.unlock();
+    if (choice === 'continue' && save) {
+      this.restoreSave(save);
+      await this.startReality(save.reality, save.checkpoint, true);
+    } else {
+      clearSave();
+      this.flags.load({});
+      this.inventory.clear();
+      this.status.reset(0);
+      this.mats = [];
+      this.tallies = 0;
+      this.playSeconds = 0;
+      await this.startReality(REALITY_ORDER[0]!, undefined, false);
+    }
+  }
+
+  private restoreSave(s: SaveData): void {
+    this.flags.load(s.flags);
+    this.inventory.load(s.inventory);
+    this.inventory.select(s.selected);
+    this.status.reset(s.bac);
+    this.mats = [...s.mats];
+    this.tallies = s.tallies;
+    this.playSeconds = s.playSeconds;
+  }
+
+  async openPause(): Promise<void> {
+    if (this.pauseOpen || this.mode !== 'play') return;
+    this.pauseOpen = true;
+    this.loop.paused = true;
+    this.input.setEnabled(false);
+    this.input.exitPointerLock();
+    const r = await this.ui.showPause(this.openSettings);
+    this.pauseOpen = false;
+    if (r === 'title') {
+      this.disposeReality();
+      await this.titleScreen();
+      return;
+    }
+    this.loop.paused = false;
+    this.input.setEnabled(true);
+    if (!this.touch) void this.input.requestPointerLock();
+  }
+
+  // ───────────────────────────── realities ─────────────────────────────
+
+  /** Loads a reality and spawns at a checkpoint (fade in, chapter title on first entry). */
+  async startReality(id: string, checkpoint?: string, fromSave = false): Promise<void> {
+    if (this.loadingBusy) return;
+    this.loadingBusy = true;
+    try {
+      const target = realityExists(id) ? id : REALITY_ORDER[0]!;
+      this.mode = 'loading';
+      this.input.setEnabled(false);
+      this.ui.setHudVisible(false);
+      this.touch?.setVisible(false);
+      const loading = this.ui.showLoading(this.rng.int(0, 5));
+      this.disposeReality();
+      const mod = (await REALITIES[target]!()).default;
+      const scene = new Scene();
+      scene.background = new Color(0x000000);
+      const scope = new Scope();
+      const builder = new Builder();
+      const mats = new MaterialLib(
+        this.loader,
+        scope,
+        this.renderer.profile.textures === 'half' ? '512' : '1k',
+      );
+      this.scope = scope;
+      this.scene = scene;
+      this.builder = builder;
+      this.realityModule = mod;
+      this.realityId = target;
+      const inst = await mod.create({
+        game: this,
+        scene,
+        scope,
+        builder,
+        mats,
+        progress: (p) => loading.progress(p * 0.8),
+      });
+      const colliders = builder.finish();
+      scene.add(builder.group);
+      for (const [layer, g] of colliders) {
+        this.world.addStatic(g, layer);
+        scope.add(g);
+      }
+      scope.onDispose(() =>
+        builder.group.traverse((o) => (o as { geometry?: { dispose(): void } }).geometry?.dispose()),
+      );
+      await Promise.race([Promise.allSettled(mats.pending), new Promise((r) => setTimeout(r, 15000))]);
+      loading.progress(0.9);
+      scene.add(this.lightObj);
+      this.renderer.setScene(scene);
+      if (this.renderer.profile.ao) this.renderer.rebuild();
+      try {
+        await this.renderer.renderer.compileAsync(scene, this.renderer.camera);
+      } catch {
+        /* older drivers: compile lazily */
+      }
+      loading.progress(1);
+      this.reality = inst;
+      const cpId = checkpoint && inst.checkpoints[checkpoint] ? checkpoint : inst.defaultCheckpoint;
+      this.checkpoint = cpId;
+      const cp = inst.checkpoints[cpId]!;
+      this.player.teleport(cp.pos, cp.yaw);
+      this.rig.setOrientation(cp.yaw, cp.pitch ?? 0);
+      this.player.noclip = !!this.debug.fly;
+      this.fx.fade = 1;
+      loading.close();
+      this.mode = 'play';
+      this.input.setEnabled(true);
+      this.ui.setHudVisible(true);
+      this.touch?.setVisible(true);
+      if (!this.touch && !this.debug.test) void this.input.requestPointerLock();
+      this.saveCheckpoint(cpId);
+      runScript(async () => inst.start(cpId));
+      if (!fromSave && !this.debug.test) void this.ui.chapter(mod.title);
+      void this.tweenFx('fade', 0, 1.6);
+    } finally {
+      this.loadingBusy = false;
+    }
+  }
+
+  /** Called by realities to move on. */
+  async gotoReality(id: string, checkpoint?: string): Promise<void> {
+    this.input.setEnabled(false);
+    await this.tweenFx('fade', 1, 1.2);
+    await this.startReality(id, checkpoint, false);
+  }
+
+  private disposeReality(): void {
+    this.clock.cancelAll();
+    this.reality?.dispose?.();
+    this.reality = null;
+    this.entities = [];
+    this.nav = null;
+    this.interactions.clear();
+    this.world.clear();
+    this.onFootstep = null;
+    this.onAction = null;
+    this.tweens = [];
+    this.seated = false;
+    this.seatedWithDrink = false;
+    this.hiddenIn = null;
+    this.rig.lockTarget = null;
+    this.player.frozen = false;
+    this.ui.subtitle(null, null);
+    this.ui.setPrompt(null);
+    if (this.scene) this.scene.remove(this.lightObj);
+    this.renderer.setScene(null);
+    this.scope?.dispose();
+    this.scope = null;
+    this.scene = null;
+    this.builder = null;
+    this.grade = NEUTRAL_GRADE;
+  }
+
+  saveCheckpoint(cp: string): void {
+    this.checkpoint = cp;
+    if (this.debug.test) return;
+    writeSave({
+      v: 1,
+      reality: this.realityId,
+      checkpoint: cp,
+      flags: this.flags.toJSON(),
+      inventory: this.inventory.toJSON(),
+      selected: this.inventory.selected,
+      bac: Math.min(this.status.intox.bac, 1.8),
+      mats: [...this.mats],
+      tallies: this.tallies,
+      playSeconds: this.playSeconds,
+    });
+  }
+
+  /** Blackout: fade, show „okno", reload the last checkpoint. */
+  async okno(reason: string): Promise<void> {
+    if (this.mode !== 'play' || this.debug.god) return;
+    this.mode = 'okno';
+    console.info('okno:', reason);
+    this.input.setEnabled(false);
+    this.synth.stinger(0.6);
+    this.fx.shake = 0.6;
+    await this.tweenFx('fade', 1, 0.6);
+    this.disposeReality();
+    await this.ui.showOkno();
+    const save = loadSave();
+    if (save) this.restoreSave(save);
+    this.status.reset(Math.min(1, this.status.intox.bac));
+    this.status.buffs.add('hangover', 60);
+    await this.startReality(save?.reality ?? this.realityId, save?.checkpoint ?? this.checkpoint, true);
+  }
+
+  // ───────────────────────────── scripting helpers ─────────────────────────────
+
+  /** Tweens an fx value on sim time. */
+  tweenFx(key: keyof Game['fx'], to: number, seconds: number): Promise<void> {
+    return new Promise((resolve) => {
+      this.tweens = this.tweens.filter((tw) => {
+        if (tw.key === key) {
+          tw.resolve();
+          return false;
+        }
+        return true;
+      });
+      if (seconds <= 0) {
+        this.fx[key] = to;
+        resolve();
+        return;
+      }
+      this.tweens.push({ key, from: this.fx[key], to, dur: seconds, t: 0, resolve });
+    });
+  }
+
+  /** Shows a subtitle line and waits (voice clip length or reading time). Skippable. */
+  async say(who: string | null, text: string, voiceUrl?: string, minSeconds = 0): Promise<void> {
+    let seconds = Math.max(1.8, text.length / 14 + 0.7, minSeconds);
+    let handle: { stop(f?: number): void } | null = null;
+    if (voiceUrl && this.audio.ctx) {
+      const buf = await this.audio.load(voiceUrl);
+      if (buf) {
+        seconds = Math.max(minSeconds, buf.duration + 0.35);
+        handle = this.audio.play(buf, { bus: 'voice', reverb: 0.15 });
+      }
+    }
+    this.ui.subtitle(who, text);
+    this.skipRequested = false;
+    await this.clock.until(() => this.skipRequested, seconds);
+    if (this.skipRequested) handle?.stop(0.15);
+    this.ui.subtitle(null, null);
+  }
+
+  async choose(options: string[]): Promise<number> {
+    const hadLock = this.input.pointerLocked;
+    this.input.exitPointerLock();
+    this.input.setEnabled(false);
+    const i = await this.ui.choose(options);
+    this.input.setEnabled(true);
+    if (hadLock && !this.touch) void this.input.requestPointerLock();
+    return i;
+  }
+
+  async readDocument(title: string, body: string): Promise<void> {
+    this.input.setEnabled(false);
+    this.loop.paused = true;
+    const hadLock = this.input.pointerLocked;
+    this.input.exitPointerLock();
+    await this.ui.showDocument(title, body);
+    this.loop.paused = false;
+    this.input.setEnabled(true);
+    if (hadLock && !this.touch) void this.input.requestPointerLock();
+  }
+
+  addNoise(n: NoiseEvent): void {
+    this.noises.push(n);
+  }
+
+  giveLight(power = 1): void {
+    this.hasLight = true;
+    this.lightPower = power;
+  }
+
+  // ───────────────────────────── simulation ─────────────────────────────
+
+  private step(dt: number): void {
+    // tweens + script clock always run (cutscenes) unless loading
+    for (let i = this.tweens.length - 1; i >= 0; i--) {
+      const tw = this.tweens[i]!;
+      tw.t += dt;
+      const k = clamp(tw.t / tw.dur, 0, 1);
+      const e = k * k * (3 - 2 * k);
+      this.fx[tw.key] = tw.from + (tw.to - tw.from) * e;
+      if (k >= 1) {
+        this.tweens.splice(i, 1);
+        tw.resolve();
+      }
+    }
+    this.fx.shake = damp(this.fx.shake, 0, 3, dt);
+    if (this.mode !== 'play') {
+      this.input.snapshot();
+      return;
+    }
+    this.playSeconds += dt;
+    const snap = this.input.snapshot();
+    this.handleActions(snap);
+
+    const st = this.status;
+    const bac = st.intox.bac;
+    const drunk = st.buffs.has('steady') ? 0 : clamp((bac - 0.6) / 2, 0, 1);
+    const t = this.clock.time;
+    const sway = drunk * (Math.sin(t * 0.9) * 0.25 + Math.sin(t * 2.3 + 1) * 0.1);
+    const speedMul =
+      (st.buffs.has('hangover') ? 0.85 : 1) *
+      (st.cold.heat < 0.3 ? 0.6 + st.cold.heat : 1) *
+      (this.seated ? 0 : 1);
+    const footstep = this.player.step(dt, snap, {
+      speedMul,
+      swayAngle: sway,
+      canSprint: !st.fear.panicking || st.fear.value < 0.95,
+    });
+    if (this.builder) {
+      _eye.copy(this.player.pos).setY(this.player.pos.y + 0.05);
+      const surf = this.builder.surfaceAt(_eye);
+      if (surf) this.player.surface = surf;
+    }
+    if (footstep) {
+      this.addNoise({
+        x: footstep.position.x,
+        y: footstep.position.y,
+        z: footstep.position.z,
+        loudness: footstep.loudness,
+        kind: 'step',
+      });
+      this.synth.footstep(footstep.surface, footstep.loudness, footstep.position);
+      this.onFootstep?.(footstep);
+    }
+    if (st.fear.panicking && this.rng.chance(dt * 0.8)) {
+      const p = this.player.pos;
+      this.addNoise({ x: p.x, y: p.y + 1.5, z: p.z, loudness: 0.5, kind: 'panic' });
+    }
+
+    // drinking animation timer
+    if (this.drinkTimer > 0) {
+      this.drinkTimer -= dt;
+      if (this.drinkTimer <= 0 && this.drinkItem) this.finishDrink(this.drinkItem);
+    }
+
+    // entities
+    this.updatePlayerView();
+    const ctx = this.aiCtx;
+    ctx.time = this.clock.time;
+    ctx.dt = dt;
+    ctx.noises = this.noises;
+    for (const e of this.entities) e.tick(dt, ctx);
+    this.noises = [];
+
+    // status
+    const r = this.reality;
+    const env = {
+      threat: r?.threat ? r.threat() : this.defaultThreat(),
+      darkness: (r?.darkness?.() ?? 0) * (this.lightOn ? 0.4 : 1),
+      coldExposure: r?.coldExposure?.() ?? 0,
+      warmth: r?.warmth?.() ?? 0,
+    };
+    const events = st.step(dt, env);
+    this.handleStatusEvents(events);
+    if (this.hasLight && this.lightOn && this.player.sprinting && this.rng.chance(dt * 0.6))
+      this.lightOn = false;
+
+    // reality + interactions + scripts
+    r?.tick?.(dt);
+    this.lookDir(_look);
+    _eye.copy(this.player.pos).setY(this.player.pos.y + this.player.eyeHeight());
+    this.interactions.update(_eye, _look, this.world, this.world.activeMask);
+    this.clock.step(dt);
+
+    // heartbeat when afraid
+    if (st.fear.value > 0.45) {
+      this.heartbeatTimer -= dt;
+      if (this.heartbeatTimer <= 0) {
+        this.synth.heartbeat(clamp((st.fear.value - 0.4) * 1.6, 0, 1));
+        this.heartbeatTimer = 1.15 - st.fear.value * 0.55;
+      }
+    }
+  }
+
+  private handleActions(snap: InputSnapshot): void {
+    for (const a of snap.pressed) {
+      if (this.onAction?.(a)) continue;
+      switch (a) {
+        case 'pause':
+          void this.openPause();
+          break;
+        case 'skip':
+          this.skipRequested = true;
+          break;
+        case 'interact':
+          if (!this.interactions.use()) this.skipRequested = true;
+          break;
+        case 'drink':
+          this.startDrink();
+          break;
+        case 'light':
+          if (this.hasLight) {
+            this.lightOn = !this.lightOn;
+            this.synth.click(undefined, this.lightOn ? 900 : 600, 0.12);
+          }
+          break;
+        case 'slotPrev':
+          this.inventory.cycle(-1);
+          break;
+        case 'slotNext':
+          this.inventory.cycle(1);
+          break;
+        default:
+          if (a.startsWith('slot')) this.inventory.select(Number(a.slice(4)) - 1);
+      }
+    }
+  }
+
+  private startDrink(): void {
+    if (this.drinkTimer > 0) return;
+    const slot = this.inventory.slots[this.inventory.selected]!;
+    if (!slot.item) {
+      this.ui.toast(t('hotbarEmpty'));
+      return;
+    }
+    const item = this.inventory.takeSelected()!;
+    this.drinkItem = item;
+    this.drinkTimer = ITEMS[item].kind === 'food' ? 1.4 : ITEMS[item].glass === 'mug' ? 2.2 : 1.1;
+    this.synth.pour(this.drinkTimer * 0.8, undefined, true);
+  }
+
+  /** Drinks immediately (scripted rounds at the table). */
+  consumeNow(item: ItemId): void {
+    this.finishDrink(item);
+  }
+
+  private finishDrink(item: ItemId): void {
+    this.drinkItem = null;
+    this.drinkTimer = 0;
+    const events = this.status.consume(item);
+    const bac = this.status.intox.bac + this.status.intox.pendingTotal;
+    const lvl =
+      bac >= BAC_WASTED
+        ? t('bacWasted')
+        : bac >= BAC_DRUNK
+          ? t('bacDrunk')
+          : bac >= BAC_TIPSY
+            ? t('bacTipsy')
+            : t('bacSober');
+    this.ui.showStatus(bac, `${ITEMS[item].name} — ${ITEMS[item].tag} · ${lvl}`, this.status.mysteryShown);
+    this.handleStatusEvents(events);
+  }
+
+  /** Reality hook for the eon drink. */
+  onEon: (() => void) | null = null;
+
+  private handleStatusEvents(events: StatusEvent[]): void {
+    for (const e of events) {
+      if (e === 'okno') void this.okno('alcohol');
+      else if (e === 'frozen') void this.okno('cold');
+      else if (e === 'eon') this.onEon?.();
+      else if (e === 'absintheEnd') this.world.activeMask &= ~Layer.ABSINTHE;
+    }
+    this.world.activeMask =
+      Layer.BASE |
+      (this.status.buffs.has('absinthe') ? Layer.ABSINTHE : 0) |
+      (this.status.layerVisionActive ? Layer.REVEAL : 0);
+  }
+
+  private defaultThreat(): number {
+    let threat = 0;
+    for (const e of this.entities) {
+      if (!e.active || !e.visible) continue;
+      const d = e.pos.distanceTo(this.player.pos);
+      threat = Math.max(threat, clamp(1 - d / 14, 0, 1) * (0.4 + 0.6 * e.anim.alert));
+    }
+    return threat;
+  }
+
+  lookDir(out: Vector3): Vector3 {
+    const cp = Math.cos(this.player.pitch);
+    return out.set(
+      -Math.sin(this.player.yaw) * cp,
+      Math.sin(this.player.pitch),
+      -Math.cos(this.player.yaw) * cp,
+    );
+  }
+
+  private view: PlayerView = {
+    pos: new Vector3(),
+    eye: new Vector3(),
+    vel: new Vector3(),
+    lookDir: new Vector3(),
+    crouched: false,
+    seated: false,
+    seatedWithDrink: false,
+    hidden: null,
+    hiddenWitnessed: false,
+    visibility: 1,
+    ward: false,
+    glowing: false,
+    lightOn: false,
+    lightPower: 1,
+    inWater: false,
+    waterDepth: 0,
+    dead: false,
+  };
+
+  private updatePlayerView(): void {
+    const v = this.view;
+    const p = this.player;
+    v.pos.copy(p.pos);
+    v.eye.copy(p.pos).setY(p.pos.y + p.eyeHeight());
+    v.vel.copy(p.vel);
+    this.lookDir(v.lookDir);
+    v.crouched = p.crouched;
+    v.seated = this.seated;
+    v.seatedWithDrink = this.seatedWithDrink;
+    v.hidden = this.hiddenIn;
+    v.hiddenWitnessed = this.hiddenWitnessed;
+    const base = this.reality?.visibility?.() ?? 0.75;
+    v.visibility = clamp(base * (p.crouched ? 0.6 : 1) + (this.lightOn ? 0.35 * this.lightPower : 0), 0, 1);
+    v.ward = this.status.buffs.has('ward');
+    v.glowing = this.status.buffs.has('reveal');
+    v.lightOn = this.lightOn;
+    v.lightPower = this.lightPower;
+    v.dead = this.mode !== 'play';
+  }
+
+  get playerView(): PlayerView {
+    return this.view;
+  }
+
+  private makeAIContext(): AIContext {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const game = this;
+    return {
+      world: this.world,
+      get nav() {
+        return game.nav;
+      },
+      rng: this.rng,
+      time: 0,
+      dt: SIM_DT,
+      player: this.view,
+      noises: [],
+      isObserved(pos: Vector3, radius = 0.5): boolean {
+        if (game.mode !== 'play') return false;
+        const v = game.view;
+        _to.subVectors(pos, v.eye);
+        const d = _to.length();
+        if (d < 0.6) return true;
+        _to.divideScalar(d);
+        // fixed sim-side view cone (independent of screen aspect / FOV setting)
+        const half = 0.62 + Math.atan2(radius, d);
+        if (_to.dot(v.lookDir) < Math.cos(half)) return false;
+        return game.world.lineOfSight(v.eye, pos);
+      },
+      catchPlayer(by: string) {
+        void game.okno(by);
+      },
+      signal(id: string, name: string, data?: unknown) {
+        game.onSignal?.(id, name, data);
+      },
+    } as AIContext;
+  }
+
+  /** Reality hook for entity signals. */
+  onSignal: ((id: string, name: string, data?: unknown) => void) | null = null;
+
+  // ───────────────────────────── rendering ─────────────────────────────
+
+  private render(alpha: number, frameDt: number): void {
+    this.renderTime = this.clock.time + alpha * SIM_DT;
+    this.input.pollGamepad(frameDt);
+    const look = this.input.consumeLook();
+    if (this.mode === 'play' && !this.loop.paused) this.rig.applyLook(look.dx, look.dy);
+    const st = this.status;
+    const motion = this.settings.motion;
+    this.rig.update(frameDt, alpha, {
+      bac: st.intox.bac,
+      steady: st.buffs.has('steady'),
+      fear: st.fear.value,
+      motion,
+      shake: this.fx.shake,
+      renderTime: this.renderTime,
+    });
+    if (this.scene) {
+      this.reality?.frame?.(frameDt, alpha, this.renderTime);
+      // carried light
+      const cam = this.renderer.camera;
+      this.lightObj.position
+        .copy(cam.position)
+        .add(_to.set(0.25, -0.2, -0.3).applyQuaternion(cam.quaternion));
+      const flick = 0.85 + 0.15 * Math.sin(this.renderTime * 23.0) * Math.sin(this.renderTime * 7.3);
+      this.lightObj.intensity = this.lightOn ? 2.2 * this.lightPower * flick : 0;
+      this.applyPostFx();
+      this.renderer.render(frameDt);
+      this.audio.updateListener(cam);
+    }
+    if (this.mode === 'play') this.updateHud();
+    this.frames++;
+    if (this.statsEl) {
+      this.statsTimer += frameDt;
+      if (this.statsTimer > 0.5) {
+        const i = this.renderer.info;
+        const p = this.player.pos;
+        this.statsEl.textContent = `fps ${(this.frames / this.statsTimer).toFixed(0)} · scale ${this.renderer.resScale.toFixed(2)} · ${this.renderer.profile.tier}\ncalls ${i.calls} · tris ${(i.triangles / 1000).toFixed(0)}k · tex ${i.textures} · geo ${i.geometries}\npos ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${p.z.toFixed(1)} · ‰ ${st.intox.bac.toFixed(2)} · fear ${st.fear.value.toFixed(2)}`;
+        this.statsTimer = 0;
+        this.frames = 0;
+      }
+    }
+  }
+
+  private applyPostFx(): void {
+    const st = this.status;
+    const bac = st.intox.bac;
+    const m = this.settings.motion;
+    const steady = st.buffs.has('steady');
+    const t = this.renderTime;
+    const d = steady ? 0 : clamp((bac - 0.4) / 2.4, 0, 1);
+    const absinthe = st.buffs.has('absinthe') ? 1 : 0;
+    const fear = st.fear.value;
+    this.renderer.drunk.set({
+      double: steady ? 0 : clamp((bac - 1.1) / 1.6, 0, 1) * (0.55 + 0.45 * Math.sin(t * 0.37) ** 2),
+      aberr: clamp(d * 0.6 + fear * 0.5 + absinthe * 0.6, 0, 1.4),
+      blur: steady ? 0 : clamp((bac - 2.0) / 1.0, 0, 1) * 0.7,
+      dirX: Math.cos(t * 0.21),
+      dirY: Math.sin(t * 0.17) * 0.3,
+    });
+    this.renderer.warp.set(t, (d * 0.9 + absinthe * 0.6) * (0.4 + 0.6 * m), this.fx.warp + absinthe * 0.4);
+    const g = this.grade;
+    this.renderer.grade.setGrade(g);
+    const reduce = this.settings.reduceFlashes;
+    this.renderer.grade.setDynamic({
+      time: t,
+      fade: this.fx.fade,
+      white: reduce ? Math.min(this.fx.white, 0.6) : this.fx.white,
+      vignette: this.fx.vignette + fear * 0.6 + (1 - st.cold.heat) * 0.4,
+      frost: Math.max(this.fx.frost, (1 - st.cold.heat) * 0.9),
+      desat: this.fx.desat + fear * 0.35,
+      baseSaturation: g.saturation,
+    });
+  }
+
+  private updateHud(): void {
+    const f = this.interactions.focused;
+    if (f && !this.ui.choosing) this.ui.setPrompt(typeof f.prompt === 'function' ? f.prompt() : f.prompt);
+    else this.ui.setPrompt(null);
+    this.ui.setHotbar(this.inventory.slots, this.inventory.selected, (i) => this.inventory.select(i));
+  }
+}

@@ -1,0 +1,104 @@
+/** All UI strings (Slovak). Dialogue lines live with each reality's script. */
+export const sk = {
+  gameTitle: 'Ešte jedno',
+  tagline: 'Hororová adventúra z jednej krčmy',
+  menuNew: 'Nová hra',
+  menuContinue: 'Pokračovať',
+  menuSettings: 'Nastavenia',
+  menuAbout: 'O hre',
+  menuQuitToTitle: 'Do hlavného menu',
+  menuResume: 'Pokračovať v hre',
+  menuBack: 'Späť',
+  pauseTitle: 'Pauza',
+  loading: 'Načítavam…',
+  loadingTip1: 'Borovička vraj odháňa zlé.',
+  loadingTip2: 'Keď máš v sebe priveľa, príde okno.',
+  loadingTip3: 'Chlieb s masťou a cibuľou ťa postaví na nohy.',
+  loadingTip4: 'Niektoré veci uvidíš, len keď si poriadne podgurážený.',
+  loadingTip5: 'Ak sa niečo hýbe len vtedy, keď sa nepozeráš, nepozeraj sa preč.',
+  okno: 'okno',
+  oknoSub: 'Niečo ti chýba. Kus večera.',
+  pressToStart: 'Klikni alebo ťukni pre pokračovanie',
+  rotateDevice: 'Otoč zariadenie na šírku',
+  clickToLook: 'Klikni do hry, aby si sa mohol rozhliadať',
+  warnTitle: 'Upozornenie',
+  warnBody:
+    'Hra je fikcia určená pre dospelých (18+). Obsahuje hororové scény, náhle zľaknutia, blikajúce svetlá a pitie alkoholu. Pite zodpovedne.',
+  warnOk: 'Rozumiem',
+  headphones: 'Odporúčame slúchadlá.',
+  settingsTitle: 'Nastavenia',
+  setQuality: 'Kvalita grafiky',
+  setQualityAuto: 'Automaticky',
+  setQualityLow: 'Nízka',
+  setQualityMed: 'Stredná',
+  setQualityHigh: 'Vysoká',
+  setSensitivity: 'Citlivosť myši',
+  setTouchSensitivity: 'Citlivosť dotyku',
+  setInvertY: 'Obrátiť os Y',
+  setFov: 'Zorné pole',
+  setMaster: 'Hlasitosť',
+  setMusic: 'Hudba',
+  setVoice: 'Hlasy',
+  setSfx: 'Zvuky',
+  setMotion: 'Pohyb kamery a opitosť',
+  setFlashes: 'Obmedziť záblesky',
+  setSubtitleSize: 'Veľkosť titulkov',
+  setDifficulty: 'Obtiažnosť',
+  diffStory: 'Príbeh',
+  diffNormal: 'Normálna',
+  on: 'Zap.',
+  off: 'Vyp.',
+  small: 'Malé',
+  medium: 'Stredné',
+  large: 'Veľké',
+  promptInteract: 'Použiť',
+  promptTalk: 'Hovoriť',
+  promptSit: 'Sadnúť si',
+  promptTake: 'Vziať',
+  promptOpen: 'Otvoriť',
+  promptRead: 'Čítať',
+  promptDrink: 'Vypiť',
+  promptOrder: 'Objednať',
+  promptPress: 'Stlačiť',
+  promptHide: 'Skryť sa',
+  promptLeave: 'Vyjsť',
+  keyHintInteract: 'E',
+  touchAction: 'Akcia',
+  touchDrink: 'Piť',
+  touchLight: 'Svetlo',
+  touchCrouch: 'Skrčiť',
+  touchSprint: 'Beh',
+  touchThrow: 'Hodiť',
+  touchPause: 'Pauza',
+  hotbarEmpty: 'Nemáš nič na pitie.',
+  promile: '‰',
+  bacSober: 'triezvy',
+  bacTipsy: 'podgurážený',
+  bacDrunk: 'opitý',
+  bacWasted: 'pod obraz',
+  journalTitle: 'Pivné tácky',
+  journalEmpty: 'Zatiaľ nič.',
+  choiceHint: 'Vyber si',
+  credits: 'Titulky',
+  aboutBody:
+    'Ešte jedno je fikcia. Postavy, miesta a udalosti sú vymyslené.\nHru vytvoril Claude (Anthropic) pre m1omg.\nModely a textúry: Poly Haven a ambientCG (CC0). Ďalšie modely, obrázky, hudba a hlasy: generované pomocou AI (Higgsfield, Krea).',
+  continueNoSave: 'Nemáš uloženú hru.',
+  updated: 'Hra bola aktualizovaná. Načítavam znova…',
+  webglFail: 'Tvoj prehliadač nepodporuje WebGL 2. Skús aktuálny Chrome, Firefox alebo Safari.',
+  saved: 'Uložené',
+} as const;
+
+export type StringKey = keyof typeof sk;
+
+export function t(key: StringKey): string {
+  return sk[key];
+}
+
+const plural = new Intl.PluralRules('sk');
+/** Slovak plural forms: [one, few, many/other], e.g. ['fľaša', 'fľaše', 'fliaš']. */
+export function plur(n: number, forms: readonly [string, string, string]): string {
+  const cat = plural.select(n);
+  if (cat === 'one') return forms[0];
+  if (cat === 'few') return forms[1];
+  return forms[2];
+}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#777}</style>
+<script type="importmap">{"imports":{"three":"/node_modules/three/build/three.module.js","three/addons/":"/node_modules/three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+const params = new URLSearchParams(location.search);
+const url = params.get('m');
+const W = 768, H = 768;
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H);
+renderer.toneMapping = THREE.AgXToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x777777);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(2, 3, 4); scene.add(key);
+const cam = new THREE.PerspectiveCamera(30, W / H, 0.01, 100);
+const gltf = await new GLTFLoader().loadAsync(url);
+const root = gltf.scene;
+scene.add(root);
+const box = new THREE.Box3().setFromObject(root);
+const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+const dist = Math.max(size.x, size.y, size.z) * 2.2;
+window.views = ['+z', '+x', '-z', '-x'];
+window.shot = (v) => {
+  const d = { '+z': [0, 0, 1], '-z': [0, 0, -1], '+x': [1, 0, 0], '-x': [-1, 0, 0], 'top': [0, 1, 0.001] }[v];
+  cam.position.set(center.x + d[0] * dist, center.y + d[1] * dist, center.z + d[2] * dist);
+  cam.lookAt(center);
+  renderer.render(scene, cam);
+};
+window.info = { size: size.toArray(), center: center.toArray() };
+window.root = root; window.THREE = THREE; window.renderer = renderer; window.scene = scene; window.cam = cam;
+window.ready = true;
+</script></body></html>

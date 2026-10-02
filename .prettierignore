@@ -1,0 +1,8 @@
+dist
+node_modules
+public/assets
+assets-src
+.cache
+docs/sealed-design.b64
+package-lock.json
+scripts/preview/*.html
