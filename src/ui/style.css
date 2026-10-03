@@ -512,25 +512,70 @@ body {
 }
 
 .touch .stick-base {
+  /* rest position: bottom-left corner, clear of the hotbar; the centre is the anchor */
   position: absolute;
-  width: 120px;
-  height: 120px;
-  margin: -60px 0 0 -60px;
+  left: calc(max(20px, env(safe-area-inset-left)) + 88px);
+  top: calc(100% - max(20px, env(safe-area-inset-bottom)) - 112px);
+  width: 150px;
+  height: 150px;
+  margin: -75px 0 0 -75px;
   border-radius: 50%;
-  border: 1px solid rgba(239, 230, 212, 0.25);
-  background: rgba(11, 9, 7, 0.2);
-  display: none;
+  border: 1px solid rgba(239, 230, 212, 0.22);
+  /* a shallow dish: dark in the middle, a pale rim, a soft shadow below */
+  background: radial-gradient(
+    circle,
+    rgba(8, 6, 5, 0.6) 0 44%,
+    rgba(8, 6, 5, 0.32) 60%,
+    rgba(239, 230, 212, 0.16) 62% 65%,
+    rgba(8, 6, 5, 0.28) 67%
+  );
+  box-shadow:
+    inset 0 9px 18px rgba(0, 0, 0, 0.6),
+    inset 0 -3px 8px rgba(239, 230, 212, 0.1),
+    0 4px 14px rgba(0, 0, 0, 0.45);
+  opacity: 0.62;
+  pointer-events: none;
+  transition:
+    opacity 0.15s,
+    left 0.2s ease-out,
+    top 0.2s ease-out;
+}
+
+.touch .stick-base.active {
+  opacity: 0.96;
+}
+
+/* brought to the thumb: no gliding there */
+.touch .stick-base.floating {
+  transition: opacity 0.1s;
 }
 
 .touch .stick-knob {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 52px;
-  height: 52px;
-  margin: -26px 0 0 -26px;
+  width: 68px;
+  height: 68px;
+  margin: -34px 0 0 -34px;
   border-radius: 50%;
-  background: rgba(239, 230, 212, 0.3);
+  /* a domed cap lit from the upper left */
+  background: radial-gradient(
+    circle at 36% 30%,
+    #fbf3e0 0%,
+    #cdc1a8 20%,
+    #8c8170 52%,
+    #4b443a 84%,
+    #2b2621 100%
+  );
+  box-shadow:
+    0 9px 16px rgba(0, 0, 0, 0.55),
+    inset 0 -6px 10px rgba(0, 0, 0, 0.42),
+    inset 0 3px 6px rgba(255, 255, 255, 0.38);
+  transition: transform 0.12s ease-out;
+}
+
+.touch .stick-base.active .stick-knob {
+  transition: none;
 }
 
 .touch .tbtn {

@@ -233,6 +233,17 @@ export class UI {
         ['med', t('setQualityMed')],
         ['high', t('setQualityHigh')],
       ]);
+      select('resolution', t('setResolution'), [
+        ['auto', t('setResolutionAuto')],
+        ['1', '100 %'],
+        ['0.85', '85 %'],
+        ['0.7', '70 %'],
+        ['0.55', '55 %'],
+      ]);
+      select('showFps', t('setShowFps'), [
+        [false, t('off')],
+        [true, t('on')],
+      ]);
       select('difficulty', t('setDifficulty'), [
         ['normal', t('diffNormal')],
         ['story', t('diffStory')],

@@ -36,6 +36,9 @@ export class GameRenderer {
   private readonly governor: ResolutionGovernor;
   /** Disable automatic resolution changes (tests, user preference). */
   dynamicRes = true;
+  private resizePending = false;
+  /** A render scale chosen in the settings (null: automatic). */
+  private fixedScale: number | null = null;
 
   private composer!: EffectComposer;
   private renderPass!: RenderPass;
@@ -93,6 +96,7 @@ export class GameRenderer {
     if (tier === this.profile.tier) return;
     this.profile = PROFILES[tier];
     this.governor.reset(this.profile.dynResMin);
+    if (this.fixedScale !== null) this.governor.fix(this.fixedScale);
     this.buildComposer();
     this.resize();
   }
@@ -115,6 +119,8 @@ export class GameRenderer {
       this.aoPass = ao;
       this.composer.addPass(ao);
     }
+    // the glow's blur chain: fewer, smaller steps on the low preset
+    this.bloom.mipmapBlurPass.levels = p.tier === 'low' ? 5 : 8;
     this.drunkPass = new EffectPass(this.camera, this.drunk);
     this.composer.addPass(this.drunkPass);
     const effects = p.bloom
@@ -143,13 +149,38 @@ export class GameRenderer {
     this.camera.updateProjectionMatrix();
   }
 
+  /**
+   * Asks for a resize before the next frame is drawn. Resizing clears the canvas, so doing it
+   * anywhere else (an event, or after drawing) shows a black frame: a flicker.
+   */
+  requestResize(): void {
+    this.resizePending = true;
+  }
+
   /** Renders one frame. `frameDt` (real seconds) only feeds the resolution governor. */
   render(frameDt: number): void {
     if (!this.scene) return;
+    if (this.resizePending) {
+      this.resizePending = false;
+      this.resize();
+    }
     this.drunkPass.enabled = this.drunk.active;
     this.renderer.info.reset();
     this.composer.render(frameDt);
-    if (this.dynamicRes && this.governor.update(frameDt)) this.resize();
+    if (this.dynamicRes && this.governor.update(frameDt)) this.resizePending = true;
+  }
+
+  /** Fixes the render scale (null: automatic, following the frame rate). */
+  setFixedScale(scale: number | null): void {
+    this.fixedScale = scale;
+    this.dynamicRes = scale === null;
+    this.governor.fix(scale);
+    this.requestResize();
+  }
+
+  /** The display's frame interval in seconds (0 until known). */
+  get displayInterval(): number {
+    return this.governor.displayInterval;
   }
 
   /** Every frame, drawn or not: lets the resolution governor learn the display's pace. */

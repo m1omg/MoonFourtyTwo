@@ -33,6 +33,9 @@ export const sk = {
   setQualityLow: 'Nízka',
   setQualityMed: 'Stredná',
   setQualityHigh: 'Vysoká',
+  setResolution: 'Rozlíšenie',
+  setResolutionAuto: 'Automaticky (podľa plynulosti)',
+  setShowFps: 'Zobraziť FPS',
   setSensitivity: 'Citlivosť myši',
   setTouchSensitivity: 'Citlivosť dotyku',
   setInvertY: 'Obrátiť os Y',
@@ -84,7 +87,7 @@ export const sk = {
   aboutBody:
     'Ešte jedno je fikcia. Postavy, miesta a udalosti sú vymyslené.\nHru vytvoril Claude (Anthropic) pre m1omg.\nModely a textúry: Poly Haven a ambientCG (CC0). Postavy: generované pomocou AI (Higgsfield, Krea). Ežov hlas: ElevenLabs. Hudba a zvuky vznikajú priamo v prehliadači.',
   aboutControls:
-    'Ovládanie\nWASD alebo šípky: chôdza · Shift: beh · Ctrl alebo C: skrčiť sa\nmyš: rozhliadanie · E alebo ľavé tlačidlo: použiť, hovoriť\nQ alebo pravé tlačidlo: vypiť · 1 – 6 alebo koliesko: vybrať\nF: zapaľovač, baterka · G: hodiť · Esc: pauza\nNa mobile: ľavá polovica obrazovky chodí, pravá sa rozhliada.',
+    'Ovládanie\nWASD alebo šípky: chôdza · Shift: beh · Ctrl alebo C: skrčiť sa\nmyš: rozhliadanie · E alebo ľavé tlačidlo: použiť, hovoriť\nQ alebo pravé tlačidlo: vypiť · 1 – 6 alebo koliesko: vybrať\nF: zapaľovač, baterka · G: hodiť · Esc: pauza\nNa mobile a tablete: joystick vľavo dole chodí (chytíš ho aj kdekoľvek na ľavej polovici), ťahaním po pravej polovici sa rozhliadaš.',
   continueNoSave: 'Nemáš uloženú hru.',
   updated: 'Hra bola aktualizovaná. Načítavam znova…',
   webglFail: 'Tvoj prehliadač nepodporuje WebGL 2. Skús aktuálny Chrome, Firefox alebo Safari.',

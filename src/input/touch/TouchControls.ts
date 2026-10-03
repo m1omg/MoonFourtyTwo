@@ -3,9 +3,15 @@ import type { Action } from '../actions.ts';
 import { el } from '../../ui/dom.ts';
 import { t } from '../../i18n/sk.ts';
 
+/** How far (px) the knob travels from the centre of the stick. */
+const STICK_R = 58;
+/** Share of the travel that does nothing (a resting thumb must not creep). */
+const DEAD = 0.12;
+
 /**
- * On-screen controls for phones/tablets: floating move stick on the left half, drag-to-look on
- * the right half, and action buttons. Pushing the stick to its edge sprints.
+ * On-screen controls for phones/tablets: a thumbstick that always shows in the bottom-left corner
+ * (touch it, or anywhere on the left half and it comes to your thumb), drag-to-look on the right
+ * half, and action buttons. Pushing the stick to its edge sprints.
  */
 export class TouchControls {
   readonly root: HTMLElement;
@@ -34,6 +40,7 @@ export class TouchControls {
     left.addEventListener('pointermove', this.onStickMove);
     left.addEventListener('pointerup', this.onStickUp);
     left.addEventListener('pointercancel', this.onStickUp);
+    left.addEventListener('contextmenu', (e) => e.preventDefault());
     right.addEventListener('pointerdown', this.onLookDown);
     right.addEventListener('pointermove', this.onLookMove);
     right.addEventListener('pointerup', this.onLookUp);
@@ -73,43 +80,64 @@ export class TouchControls {
     if (!on) {
       this.stickId = null;
       this.lookId = null;
-      this.input.setTouchMove(0, 0, false);
-      this.base.style.display = 'none';
+      this.release();
     }
+  }
+
+  /** Where the stick waits while nobody touches it (its CSS rest position), in client pixels. */
+  private restCenter(): { x: number; y: number } {
+    const r = this.base.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
   }
 
   private onStickDown = (e: PointerEvent): void => {
     if (this.stickId !== null) return;
+    e.preventDefault();
     this.stickId = e.pointerId;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    this.stickOrigin = { x: e.clientX, y: e.clientY };
-    this.base.style.display = 'block';
-    this.base.style.left = `${e.clientX}px`;
-    this.base.style.top = `${e.clientY}px`;
-    this.knob.style.transform = 'translate(0,0)';
+    // touching the stick grabs it where it is; touching elsewhere on the left brings it to the thumb
+    const rest = this.restCenter();
+    const onStick = Math.hypot(e.clientX - rest.x, e.clientY - rest.y) < STICK_R * 1.5;
+    this.stickOrigin = onStick ? rest : { x: e.clientX, y: e.clientY };
+    if (!onStick) {
+      this.base.classList.add('floating');
+      this.base.style.left = `${e.clientX}px`;
+      this.base.style.top = `${e.clientY}px`;
+    }
+    this.base.classList.add('active');
+    this.onStickMove(e);
   };
 
   private onStickMove = (e: PointerEvent): void => {
     if (e.pointerId !== this.stickId) return;
-    const R = 55;
     let dx = e.clientX - this.stickOrigin.x;
     let dy = e.clientY - this.stickOrigin.y;
     const len = Math.hypot(dx, dy);
-    if (len > R) {
-      dx = (dx / len) * R;
-      dy = (dy / len) * R;
+    if (len > STICK_R) {
+      dx = (dx / len) * STICK_R;
+      dy = (dy / len) * STICK_R;
     }
     this.knob.style.transform = `translate(${dx}px,${dy}px)`;
-    const mag = Math.min(1, len / R);
-    this.input.setTouchMove(dx / R, -dy / R, mag > 0.93 && -dy / R > 0.5);
+    // a small dead zone, then the full range: a resting thumb does not creep
+    const mag = Math.min(1, len / STICK_R);
+    const k = mag < DEAD ? 0 : (mag - DEAD) / (1 - DEAD) / Math.max(mag, 1e-6);
+    this.input.setTouchMove((dx / STICK_R) * k, (-dy / STICK_R) * k, mag > 0.93 && -dy / STICK_R > 0.5);
   };
 
   private onStickUp = (e: PointerEvent): void => {
     if (e.pointerId !== this.stickId) return;
     this.stickId = null;
-    this.base.style.display = 'none';
-    this.input.setTouchMove(0, 0, false);
+    this.release();
   };
+
+  /** The stick goes back to its corner. */
+  private release(): void {
+    this.base.classList.remove('active', 'floating');
+    this.base.style.left = '';
+    this.base.style.top = '';
+    this.knob.style.transform = 'translate(0,0)';
+    this.input.setTouchMove(0, 0, false);
+  }
 
   private onLookDown = (e: PointerEvent): void => {
     if (this.lookId !== null) return;

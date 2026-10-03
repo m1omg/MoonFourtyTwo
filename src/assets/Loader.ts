@@ -17,12 +17,32 @@ export class AssetLoader {
   private gltfCache = new Map<string, Promise<GLTF>>();
   private texCache = new Map<string, Promise<Texture | null>>();
   private anisotropy = 4;
+  private readonly maxAnisotropy: number;
 
   constructor(renderer: WebGLRenderer) {
     // three r186 bundles the Basis transcoder via import.meta.url (no transcoder path needed).
     this.ktx2 = new KTX2Loader().detectSupport(renderer);
     this.gltf = new GLTFLoader().setKTX2Loader(this.ktx2).setMeshoptDecoder(MeshoptDecoder);
-    this.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    this.maxAnisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    this.anisotropy = this.maxAnisotropy;
+  }
+
+  /**
+   * Sharpness of textures seen at a slant (floors, walls), up to what the GPU offers. Every step
+   * costs texture bandwidth, which phones have least of. Applies to textures loaded from now on and
+   * to the cached ones.
+   */
+  setAnisotropy(n: number): void {
+    const a = Math.max(1, Math.min(n, this.maxAnisotropy));
+    if (a === this.anisotropy) return;
+    this.anisotropy = a;
+    for (const p of this.texCache.values())
+      void p.then((t) => {
+        if (t && t.anisotropy !== a) {
+          t.anisotropy = a;
+          t.needsUpdate = true;
+        }
+      });
   }
 
   loadGLTF(path: string): Promise<GLTF> {

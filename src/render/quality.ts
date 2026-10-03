@@ -15,6 +15,8 @@ export interface QualityProfile {
   /** Texture resolution preference: 'half' drops the top mip level. */
   textures: 'half' | 'full';
   maxDrawDistance: number;
+  /** Real point lights every lit pixel pays for; the rest stand in (see LightBudget). */
+  maxPointLights: number;
 }
 
 export const PROFILES: Record<QualityTier, QualityProfile> = {
@@ -29,6 +31,7 @@ export const PROFILES: Record<QualityTier, QualityProfile> = {
     smaa: false,
     textures: 'half',
     maxDrawDistance: 60,
+    maxPointLights: 6,
   },
   med: {
     tier: 'med',
@@ -41,6 +44,7 @@ export const PROFILES: Record<QualityTier, QualityProfile> = {
     smaa: true,
     textures: 'full',
     maxDrawDistance: 90,
+    maxPointLights: 10,
   },
   high: {
     tier: 'high',
@@ -53,6 +57,7 @@ export const PROFILES: Record<QualityTier, QualityProfile> = {
     smaa: true,
     textures: 'full',
     maxDrawDistance: 140,
+    maxPointLights: Infinity,
   },
 };
 

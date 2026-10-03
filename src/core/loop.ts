@@ -69,6 +69,8 @@ export class GameLoop {
   fpsCap = 0;
   /** In manual mode (tests) the rAF driver does nothing; use `manualFrames`. */
   manual = false;
+  /** Milliseconds of script time per frame (simulation + issuing the draw calls), smoothed. */
+  cpuMs = 0;
 
   private running = false;
   private lastT = -1;
@@ -130,8 +132,10 @@ export class GameLoop {
   };
 
   private tick(frameDt: number): void {
+    const t0 = performance.now();
     const clamped = Math.min(Math.max(frameDt, 0), this.stepper.maxFrame);
     if (!this.paused) this.stepper.advance(clamped, this.handlers.step);
     this.handlers.render(this.paused ? 1 : this.stepper.alpha, clamped);
+    this.cpuMs += (performance.now() - t0 - this.cpuMs) * 0.1;
   }
 }

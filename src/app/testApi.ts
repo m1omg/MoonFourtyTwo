@@ -3,7 +3,7 @@ import type { ItemId } from '../sim/items/items.data.ts';
 import type { Game } from './Game.ts';
 import type { Action } from '../input/actions.ts';
 import { DoubleSide } from 'three';
-import type { InstancedMesh, Line, Material, Mesh, Object3D, Points, Sprite, Texture } from 'three';
+import type { InstancedMesh, Light, Line, Material, Mesh, Object3D, Points, Sprite, Texture } from 'three';
 
 /** Deterministic hooks for Playwright (`#…&test`). The loop is driven manually. */
 export function installTestApi(game: Game): void {
@@ -137,6 +137,15 @@ export function installTestApi(game: Game): void {
       game.loop.manualFrames(1, 60);
       restore.forEach((f) => f());
       return [...counts].map(([key, draws]) => ({ key, draws })).sort((a, b) => b.draws - a.draws);
+    },
+    /** The scene's lights by type (visible ones; these are what every lit shader loops over). */
+    lights(): Record<string, number> {
+      const out: Record<string, number> = {};
+      game.scene?.traverseVisible((o) => {
+        if ((o as Light).isLight && o.layers.test(game.renderer.camera.layers))
+          out[o.type] = (out[o.type] ?? 0) + 1;
+      });
+      return out;
     },
     /** Where an interactable is (null if there is none with that id). */
     where(id: string): [number, number, number] | null {

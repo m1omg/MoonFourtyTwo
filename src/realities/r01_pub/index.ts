@@ -98,9 +98,8 @@ const reality: RealityModule = {
       game.player.forcedHeight = null;
       game.player.teleport(pub.playerSeat.pos.clone().add(new Vector3(0.0, 0, -0.55)), game.player.yaw);
     };
-    game.onMoveWhileSeated = () => {
-      if (!s.busy) standUp();
-    };
+    // you can always get up, even while Ežo is talking (he keeps talking)
+    game.onMoveWhileSeated = () => standUp();
 
     // ───────── interactions ─────────
     const I = game.interactions;

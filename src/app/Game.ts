@@ -45,6 +45,7 @@ import type { AIContext, NoiseEvent, PlayerView } from '../sim/ai/types.ts';
 import type { NavGrid } from '../sim/ai/nav/NavGrid.ts';
 import { Builder } from '../world/kit/Builder.ts';
 import { propDetail } from '../world/props.ts';
+import { LightBudget } from '../world/lightBudget.ts';
 import { MaterialLib } from '../world/materials.ts';
 import type { RealityInstance, RealityModule } from '../world/Reality.ts';
 import { REALITIES, REALITY_ORDER, realityExists } from '../realities/registry.ts';
@@ -90,6 +91,7 @@ export class Game {
   entities: Entity[] = [];
   nav: NavGrid | null = null;
   scene: Scene | null = null;
+  private lightBudget: LightBudget | null = null;
   reality: RealityInstance | null = null;
   realityId = '';
   realityModule: RealityModule | null = null;
@@ -138,6 +140,7 @@ export class Game {
   private torchTarget = new Object3D();
   private torchInScene = false;
   private statsEl: HTMLElement | null = null;
+  private appliedResolution: Settings['resolution'] | null = null;
   private statsTimer = 0;
   private frames = 0;
   private lastTier: QualityTier;
@@ -205,13 +208,7 @@ export class Game {
       this.audio.setHrtf(false);
     }
     this.applySettings();
-    if (debug.stats) {
-      this.statsEl = document.createElement('div');
-      this.statsEl.style.cssText =
-        'position:fixed;left:8px;bottom:8px;font:12px monospace;color:#cfc;z-index:9;pointer-events:none;white-space:pre';
-      document.body.append(this.statsEl);
-    }
-    window.addEventListener('resize', () => this.renderer.resize());
+    window.addEventListener('resize', () => this.renderer.requestResize());
     this.aiCtx = this.makeAIContext();
     this.renderer.renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
@@ -236,6 +233,12 @@ export class Game {
     this.audio.setVolume('ambience', s.sfx);
     this.ui.applySettings(s);
     comfort.reduceFlashes = s.reduceFlashes;
+    this.setStats(s.showFps || !!this.debug.stats);
+    // only when it changes: every other setting would otherwise restart the automatic scale
+    if (!this.debug.test && s.resolution !== this.appliedResolution) {
+      this.appliedResolution = s.resolution;
+      this.renderer.setFixedScale(s.resolution === 'auto' ? null : Number(s.resolution));
+    }
     if (!this.debug.quality) {
       const tier = s.quality === 'auto' ? this.lastTier : s.quality;
       if (tier !== this.renderer.profile.tier) {
@@ -245,6 +248,21 @@ export class Game {
       }
     }
     saveSettings(s);
+  }
+
+  /** The frame rate overlay (settings: „Zobraziť FPS"; `#stats` adds position and state). */
+  private setStats(on: boolean): void {
+    if (on && !this.statsEl) {
+      this.statsEl = document.createElement('div');
+      this.statsEl.style.cssText =
+        'position:fixed;left:max(8px,env(safe-area-inset-left));top:max(8px,env(safe-area-inset-top));font:12px monospace;color:#cfc;background:rgba(0,0,0,.45);padding:3px 6px;z-index:9;pointer-events:none;white-space:pre';
+      document.body.append(this.statsEl);
+      this.statsTimer = 0;
+      this.frames = 0;
+    } else if (!on && this.statsEl) {
+      this.statsEl.remove();
+      this.statsEl = null;
+    }
   }
 
   openSettings = async (): Promise<void> => {
@@ -286,6 +304,7 @@ export class Game {
     const theme = new MusicBox(this.audio);
     theme.play({ ...TUNES.esteJedno!, voice: 'musicbox', rate: 0.78 }, undefined, 0.2);
     const choice = await this.ui.showTitle(!!save, this.openSettings);
+    this.goFullscreen();
     theme.stop();
     window.removeEventListener('pointerdown', wake);
     window.removeEventListener('keydown', wake);
@@ -339,6 +358,31 @@ export class Game {
     this.loop.paused = false;
     this.input.setEnabled(true);
     if (!this.touch) void this.input.requestPointerLock();
+    else this.goFullscreen();
+  }
+
+  /**
+   * Phones and tablets play full screen, held sideways: no browser bars to grow and shrink the
+   * picture. Needs a tap (call it from one); browsers that cannot do it are simply left alone.
+   */
+  private goFullscreen(): void {
+    if (!this.touch || this.debug.test || document.fullscreenElement) return;
+    const root = document.documentElement as HTMLElement & {
+      webkitRequestFullscreen?: (o?: FullscreenOptions) => Promise<void> | void;
+    };
+    const request = root.requestFullscreen?.bind(root) ?? root.webkitRequestFullscreen?.bind(root);
+    if (!request) return;
+    const sideways = () => {
+      const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+      return o?.lock?.('landscape');
+    };
+    try {
+      void Promise.resolve(request({ navigationUI: 'hide' }))
+        .then(sideways)
+        .catch(() => undefined);
+    } catch {
+      /* not allowed here */
+    }
   }
 
   // ───────────────────────────── realities ─────────────────────────────
@@ -360,6 +404,7 @@ export class Game {
       const low = this.renderer.profile.tier === 'low';
       propDetail.maxTris = low ? 9000 : Infinity;
       propDetail.maxTexture = low ? 512 : Infinity;
+      this.loader.setAnisotropy({ low: 2, med: 4, high: 8 }[this.renderer.profile.tier]);
       const scene = new Scene();
       scene.background = new Color(0x000000);
       const scope = new Scope();
@@ -400,6 +445,11 @@ export class Game {
       this.renderer.setScene(scene);
       if (this.renderer.profile.ao) this.renderer.rebuild();
       if (this.renderer.profile.tier === 'low') cheapenGlass(scene);
+      // only the point lights that matter near the camera are real ones (see LightBudget)
+      const lights = this.renderer.profile.maxPointLights;
+      this.lightBudget = Number.isFinite(lights)
+        ? new LightBudget(scene, lights, new Set([this.lightObj]))
+        : null;
       try {
         await this.renderer.renderer.compileAsync(scene, this.renderer.camera);
       } catch {
@@ -447,6 +497,7 @@ export class Game {
     this.clock.cancelAll();
     this.reality?.dispose?.();
     this.reality = null;
+    this.lightBudget = null;
     this.entities = [];
     this.nav = null;
     this.interactions.clear();
@@ -986,6 +1037,11 @@ export class Game {
   private render(alpha: number, frameDt: number): void {
     this.renderTime = this.clock.time + alpha * SIM_DT;
     this.renderer.noteFrame(frameDt);
+    // phones and tablets with 90-144 Hz screens: 60 frames are plenty, and half the heat
+    if (this.touch && !this.loop.fpsCap) {
+      const v = this.renderer.displayInterval;
+      if (v > 0 && v < 1 / 100) this.loop.fpsCap = 60;
+    }
     this.input.pollGamepad(frameDt);
     const look = this.input.consumeLook();
     if (this.mode === 'play' && !this.loop.paused) this.rig.applyLook(look.dx, look.dy);
@@ -1020,6 +1076,7 @@ export class Game {
         this.torchObj.intensity = this.lightOn && torch ? 34 * (0.25 + 0.75 * level) : 0;
         this.torchObj.distance = 9 + 11 * level;
       }
+      this.lightBudget?.update(cam);
       // first-person drinking
       if (this.drinkTimer > 0 && this.drinkItem) {
         const p = 1 - Math.max(0, this.drinkTimer - alpha * SIM_DT) / this.drinkDuration;
@@ -1040,7 +1097,15 @@ export class Game {
       if (this.statsTimer > 0.5) {
         const i = this.renderer.info;
         const p = this.player.pos;
-        this.statsEl.textContent = `fps ${(this.frames / this.statsTimer).toFixed(0)} · scale ${this.renderer.resScale.toFixed(2)} · ${this.renderer.profile.tier}\ncalls ${i.calls} · tris ${(i.triangles / 1000).toFixed(0)}k · tex ${i.textures} · geo ${i.geometries}\npos ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${p.z.toFixed(1)} · ‰ ${st.intox.bac.toFixed(2)} · fear ${st.fear.value.toFixed(2)}`;
+        const b = this.lightBudget;
+        const lights = b?.active ? `${b.size}/${b.standInCount}` : 'all';
+        let text =
+          `fps ${(this.frames / this.statsTimer).toFixed(0)} · cpu ${this.loop.cpuMs.toFixed(1)} ms · ` +
+          `${this.renderer.profile.tier} ${Math.round(this.renderer.resScale * 100)} %\n` +
+          `calls ${i.calls} · tris ${(i.triangles / 1000).toFixed(0)}k · lights ${lights}`;
+        if (this.debug.stats)
+          text += `\npos ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${p.z.toFixed(1)} · ‰ ${st.intox.bac.toFixed(2)} · fear ${st.fear.value.toFixed(2)}`;
+        this.statsEl.textContent = text;
         this.statsTimer = 0;
         this.frames = 0;
       }

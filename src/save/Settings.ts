@@ -17,6 +17,10 @@ export interface Settings {
   reduceFlashes: boolean;
   subtitleSize: 'small' | 'medium' | 'large';
   difficulty: 'story' | 'normal';
+  /** Render scale: automatic (follows the frame rate) or fixed. */
+  resolution: 'auto' | '1' | '0.85' | '0.7' | '0.55';
+  /** Frame rate and render statistics in a corner. */
+  showFps: boolean;
   warned: boolean;
 }
 
@@ -35,6 +39,8 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceFlashes: false,
   subtitleSize: 'medium',
   difficulty: 'normal',
+  resolution: 'auto',
+  showFps: false,
   warned: false,
 };
 

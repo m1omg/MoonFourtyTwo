@@ -51,4 +51,31 @@ describe('dynamic resolution at any refresh rate', () => {
     run(g, 20, hz(18));
     expect(g.scale).toBeLessThan(0.75);
   });
+
+  it('settles instead of bouncing when frames snap to whole display intervals', () => {
+    // a 120 Hz tablet: the GPU needs 6 ms + 14 ms × scale², and a frame lasts whole 8.3 ms ticks,
+    // so a little more resolution turns 16.7 ms frames into 25 ms ones and back
+    const g = new ResolutionGovernor(0.5);
+    run(g, 3, hz(120), false);
+    const tick = 1 / 120;
+    const frame = () => Math.ceil((0.006 + 0.014 * g.scale ** 2) / tick - 1e-9) * tick;
+    let t = 0;
+    let changes = 0;
+    let lateChanges = 0;
+    let last = g.scale;
+    while (t < 300) {
+      const d = frame();
+      g.noteFrame(d);
+      g.update(d);
+      if (g.scale !== last) {
+        changes++;
+        if (t > 180) lateChanges++;
+        last = g.scale;
+      }
+      t += d;
+    }
+    // the old rule changed the scale every couple of seconds for as long as you played
+    expect(changes).toBeLessThan(20);
+    expect(lateChanges).toBeLessThanOrEqual(4);
+  });
 });
