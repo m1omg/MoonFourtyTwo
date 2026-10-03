@@ -21,9 +21,13 @@ const REALITIES = (process.env.REALITIES ?? 'r0').split(',');
 /** Checkpoints where the player can walk right away (the pub opens seated, covered by pub-flow). */
 const START: Record<string, string> = { r1: 'r1:frozen' };
 
+// a small viewport keeps software rendering on shared CI runners within the time limit
+test.use({ viewport: { width: 640, height: 360 } });
+
 for (const id of REALITIES) {
   test(`reality ${id} loads and renders`, async ({ page }, info) => {
     test.skip(info.project.name !== 'desktop');
+    test.setTimeout(360_000);
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => {

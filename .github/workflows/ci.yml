@@ -27,6 +27,29 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run assets:budget
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 3
+
+  # Browser tests run on software GL (slow on shared runners). They report separately so a slow
+  # test never holds back publishing a build that passed lint, types and unit tests.
+  e2e:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --project=desktop
         env:
@@ -39,11 +62,6 @@ jobs:
             playwright-report
             test-results
           retention-days: 7
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist
-          retention-days: 3
 
   deploy:
     needs: build

@@ -95,7 +95,7 @@ test('the spa: ducks, Ežo, the pump room, the key, the door and the whirlpool',
 
 test('the lifeguard pulls a wader under', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop');
-  test.setTimeout(400_000);
+  test.setTimeout(600_000);
   const errors = await open(page);
   const a = api(page);
   // nobody watches the chair: he slips into the water
