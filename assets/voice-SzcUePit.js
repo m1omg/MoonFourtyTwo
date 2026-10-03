@@ -1,0 +1,1 @@
+import{o as e}from"./ScriptRunner-CT9Z4I2d.js";var t=null,n=null;function r(){return n||=fetch(e(`assets/voice/index.json`)).then(e=>e.ok?e.json():[]).then(e=>{t=new Set(e)}).catch(()=>{t=new Set}),n}function i(n){return t?.has(n)?e(`assets/voice/${n}.mp3`):void 0}export{i as n,r as t};
