@@ -10,6 +10,7 @@ export const sk = {
   menuResume: 'Pokračovať v hre',
   menuBack: 'Späť',
   pauseTitle: 'Pauza',
+  pauseMats: 'Podtácky s Ežovými odkazmi',
   loading: 'Načítavam…',
   loadingTip1: 'Borovička vraj odháňa zlé.',
   loadingTip2: 'Keď máš v sebe priveľa, príde okno.',

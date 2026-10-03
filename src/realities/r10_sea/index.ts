@@ -7,6 +7,7 @@ import { Crawler } from '../../sim/ai/behaviors/Crawler.ts';
 import { clamp } from '../../core/damp.ts';
 import { L10 } from './lines.ts';
 import { GAPS, HEAD, LIGHTS, PATH, PIER, WATER_Y, WHEELS, buildSea, deckHalfWidth } from './build.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 const _m = new Matrix4();
 const _q = new Quaternion();
@@ -221,6 +222,7 @@ const reality: RealityModule = {
         head: { pos: S.head!.clone(), yaw: 0 },
       },
       start(cp) {
+        placeBeerMat(game, scope, 'r10', new Vector3(-1.75, 1.2, -49.4));
         stoppers.push(game.synth.drone({ freqs: [36.7, 55], cutoff: 160, volume: 0.03 }));
         stoppers.push(
           game.synth.loopNoise({

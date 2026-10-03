@@ -17,11 +17,14 @@ import { GameLoop, SIM_DT } from '../core/loop.ts';
 import { Rng, freshSeed } from '../core/rng.ts';
 import { Scope } from '../core/scope.ts';
 import { clamp, damp } from '../core/damp.ts';
+import { comfort } from '../render/comfort.ts';
+import { MusicBox, TUNES } from '../audio/procedural/musicbox.ts';
 import { InputManager } from '../input/InputManager.ts';
 import type { InputSnapshot } from '../input/actions.ts';
 import { TouchControls } from '../input/touch/TouchControls.ts';
 import { UI } from '../ui/UI.ts';
 import { t } from '../i18n/sk.ts';
+import { MAT_COUNT } from '../world/objects/beermats.ts';
 import { AudioSystem } from '../audio/Audio.ts';
 import { Synth } from '../audio/procedural/synth.ts';
 import { AssetLoader } from '../assets/Loader.ts';
@@ -231,6 +234,7 @@ export class Game {
     this.audio.setVolume('sfx', s.sfx);
     this.audio.setVolume('ambience', s.sfx);
     this.ui.applySettings(s);
+    comfort.reduceFlashes = s.reduceFlashes;
     if (!this.debug.quality) {
       const tier = s.quality === 'auto' ? this.lastTier : s.quality;
       if (tier !== this.renderer.profile.tier) {
@@ -274,7 +278,16 @@ export class Game {
     this.touch?.setVisible(false);
     this.input.exitPointerLock();
     const save = loadSave();
+    // the theme, slowed down on a music box; a context still waiting for a gesture starts on the first one
+    const wake = () => this.audio.unlock();
+    window.addEventListener('pointerdown', wake, { once: true });
+    window.addEventListener('keydown', wake, { once: true });
+    const theme = new MusicBox(this.audio);
+    theme.play({ ...TUNES.esteJedno!, voice: 'musicbox', rate: 0.78 }, undefined, 0.2);
     const choice = await this.ui.showTitle(!!save, this.openSettings);
+    theme.stop();
+    window.removeEventListener('pointerdown', wake);
+    window.removeEventListener('keydown', wake);
     this.audio.unlock();
     if (choice === 'continue' && save) {
       this.restoreSave(save);
@@ -314,7 +327,8 @@ export class Game {
     this.loop.paused = true;
     this.input.setEnabled(false);
     this.input.exitPointerLock();
-    const r = await this.ui.showPause(this.openSettings);
+    const found = this.mats.length ? `${t('pauseMats')}: ${this.mats.length} / ${MAT_COUNT}` : undefined;
+    const r = await this.ui.showPause(this.openSettings, found);
     this.pauseOpen = false;
     if (r === 'title') {
       this.disposeReality();
@@ -473,6 +487,13 @@ export class Game {
       tallies: this.tallies,
       playSeconds: this.playSeconds,
     });
+  }
+
+  /** Keeps the collected beer mats in the save right away (they are lore; nothing else changes). */
+  keepMats(): void {
+    if (this.debug.test) return;
+    const s = loadSave();
+    if (s) writeSave({ ...s, mats: [...this.mats] });
   }
 
   /** Blackout: fade, show „okno", reload the last checkpoint. */

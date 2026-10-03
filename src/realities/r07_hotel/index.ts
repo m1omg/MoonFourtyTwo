@@ -14,6 +14,7 @@ import type { Character } from '../../npc/Character.ts';
 import { L7 } from './lines.ts';
 import { CORRIDOR, KEY_ROOMS, SALON, buildHotel } from './build.ts';
 import type { Era, Room } from './build.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 /** How each room's night looks (blended over the hotel's own warm grade). */
 const HOTEL_GRADE: GradeParams = {
@@ -433,6 +434,7 @@ const reality: RealityModule = {
         salon: { pos: S.salonInside!.clone(), yaw: -0.99 },
       },
       start(cp) {
+        placeBeerMat(game, scope, 'r7', S.guestbook!.clone().add(new Vector3(0.45, 0.5, 0)));
         stoppers.push(
           game.synth.loopNoise({
             kind: 'white',

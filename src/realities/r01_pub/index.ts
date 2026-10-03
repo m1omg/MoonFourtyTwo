@@ -13,6 +13,7 @@ import { MusicBox, TUNES } from '../../audio/procedural/musicbox.ts';
 import { BAC_DRUNK } from '../../sim/status/Intoxication.ts';
 import { clamp } from '../../core/damp.ts';
 import { Cancelled } from '../../sim/narrative/ScriptRunner.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 /** Shows a line from the pub script (voice clip if recorded) and animates the speaker. */
 async function line(game: Game, pub: Pub, id: string): Promise<void> {
@@ -573,6 +574,8 @@ const reality: RealityModule = {
     function swapToFrozen(): void {
       if (s.swapped) return;
       s.swapped = true;
+      // the frozen pub has its own mat, on the bar
+      placeBeerMat(game, scope, 'r2', new Vector3(-4.9, 1.6, -2.9));
       s.phase = 'r2';
       game.flags.put('pub.r2');
       music.stop();
@@ -650,6 +653,8 @@ const reality: RealityModule = {
         frozen: { pos: new Vector3(-7.3, 0, -1.6), yaw: -Math.PI / 2 },
       },
       start(cp) {
+        // Ežo's beer mats (collectibles): one on the round table by the dartboard
+        placeBeerMat(game, scope, 'r1', new Vector3(2.75, 1.6, -0.45));
         if (cp === 'frozen') {
           s.inWc = true;
           swapToFrozen();

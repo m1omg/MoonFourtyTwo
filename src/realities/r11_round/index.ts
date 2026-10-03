@@ -25,6 +25,7 @@ import { attachFace, maskStatic, smearTexture } from '../../world/objects/faces.
 import { Character } from '../../npc/Character.ts';
 import { buildPub } from '../r01_pub/build.ts';
 import { ASK, L11, LAST } from './lines.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 /** Seconds the stove has to be kept burning. */
 const SIEGE = 90;
@@ -458,6 +459,8 @@ const reality: RealityModule = {
         last: { pos: new Vector3(3.0, 0, 1.6), yaw: Math.PI },
       },
       start(cp) {
+        const mat = placeBeerMat(game, scope, 'r11', new Vector3(-4.15, 1.6, 2.45));
+        if (mat) dissolve.apply(mat);
         stoppers.push(game.synth.hum(0.02));
         game.audio.setReverb(1.2, 0.2);
         if (cp === 'siege') startSiege();

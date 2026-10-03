@@ -7,6 +7,8 @@ import { Inspector } from '../../sim/ai/behaviors/Inspector.ts';
 import { clamp, damp, dampAngle } from '../../core/damp.ts';
 import { L9 } from './lines.ts';
 import { B, DOORS, SPEED, buildBus } from './build.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
+import { comfort } from '../../render/comfort.ts';
 
 const _v = new Vector3();
 const _eye = new Vector3();
@@ -348,6 +350,7 @@ const reality: RealityModule = {
         konecna: { pos: S.start!.clone(), yaw: 0 },
       },
       start(cp) {
+        placeBeerMat(game, scope, 'r9', new Vector3(-0.3, 1.2, 5.2));
         startSegment(cp === 'revizor' ? 2 : cp === 'konecna' ? 4 : 0);
         // a restart past the inspector: he has already been
         if (cp === 'konecna') insp.setState('gone');
@@ -396,9 +399,11 @@ const reality: RealityModule = {
           st.flick === 'dark'
             ? 0
             : st.flick === 'buzz'
-              ? Math.sin(t * 61) * Math.sin(t * 23.7) > 0.1
-                ? 1
-                : 0.25
+              ? comfort.reduceFlashes
+                ? 0.6 + 0.15 * Math.cos(t * 4)
+                : Math.sin(t * 61) * Math.sin(t * 23.7) > 0.1
+                  ? 1
+                  : 0.25
               : 1;
         bus.tubeMat.emissiveIntensity = 1.6 * level;
         bus.hemi.intensity = 0.03 + 0.42 * level;

@@ -11,6 +11,7 @@ import { MusicBox, TUNES } from '../../audio/procedural/musicbox.ts';
 import { L6 } from './lines.ts';
 import { CABIN, FH, FLOORS, HOME_FLOOR, LANDING, LOOP_FLOOR, buildBlock, liftDoorMatrix } from './build.ts';
 import type { DoorSlot } from './build.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 /** Floor numbers on the looping landings as you keep climbing. */
 const LOOP_LABELS = ['9', '10', '11', '12', '13', '14', '40', '100'];
@@ -642,6 +643,7 @@ const reality: RealityModule = {
         key: { pos: S.caretakerInside!.clone(), yaw: Math.PI / 2 },
       },
       start(cp) {
+        placeBeerMat(game, scope, 'r6', S.note!.clone().add(new Vector3(0.25, 0.5, 0.05)));
         stoppers.push(game.synth.drone({ freqs: [55, 82.4], cutoff: 260, volume: 0.035 }));
         stoppers.push(
           game.synth.loopNoise({

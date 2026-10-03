@@ -22,6 +22,7 @@ import { Area } from '../../sim/ai/nav/NavGrid.ts';
 import { clamp } from '../../core/damp.ts';
 import { L5 } from './lines.ts';
 import { DOME, FLOOD, FLOOD_FLOOR, HALL, LEVEL_DRAINED, LEVEL_FULL, VORTEX, buildSpa } from './build.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 const reality: RealityModule = {
   id: 'r5',
@@ -490,6 +491,7 @@ const reality: RealityModule = {
         pump: { pos: new Vector3(-24.5, 0, -22), yaw: -Math.PI / 2 },
       },
       start(cp) {
+        placeBeerMat(game, scope, 'r5', new Vector3(5.3, 1.8, 11.4));
         stoppers.push(game.synth.loopNoise({ kind: 'brown', type: 'lowpass', freq: 320, volume: 0.05 }));
         stoppers.push(
           game.synth.loopNoise({

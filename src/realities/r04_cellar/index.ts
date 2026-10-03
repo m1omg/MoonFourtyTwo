@@ -38,6 +38,7 @@ import { loadVoiceIndex, voiceUrl, type Lines } from '../../narrative/voice.ts';
 import { MusicBox, TUNES } from '../../audio/procedural/musicbox.ts';
 import { Cancelled } from '../../sim/narrative/ScriptRunner.ts';
 import { clamp, damp } from '../../core/damp.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 const E = 'Ežo';
 export const L4: Lines = {
@@ -915,6 +916,7 @@ const reality: RealityModule = {
         boiler: { pos: new Vector3(0, F, -50.2), yaw: 0 },
       },
       start(cp) {
+        placeBeerMat(game, scope, 'r4', new Vector3(7.2, F + 1.6, -51.6));
         stoppers.push(game.synth.drone({ freqs: [41.2, 61.7], cutoff: 220, volume: 0.06, type: 'sawtooth' }));
         stoppers.push(game.synth.loopNoise({ kind: 'brown', type: 'lowpass', freq: 160, volume: 0.06 }));
         stoppers.push(game.synth.hum(0.05, fire.position));

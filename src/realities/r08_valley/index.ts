@@ -7,6 +7,7 @@ import { FrostFigure } from '../../sim/ai/behaviors/FrostFigure.ts';
 import { clamp } from '../../core/damp.ts';
 import { L8 } from './lines.ts';
 import { HEMI, HOLE_OFFSET, SHELTER_Z, buildValley, groundHeight } from './build.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 const _m = new Matrix4();
 const _q = new Quaternion();
@@ -271,6 +272,7 @@ const reality: RealityModule = {
         shelter: { pos: S.shelter!.clone(), yaw: 0 },
       },
       start(cp) {
+        placeBeerMat(game, scope, 'r8', S.bench!.clone().add(new Vector3(-0.8, 0.6, 0)));
         stoppers.push(
           game.synth.loopNoise({
             kind: 'white',

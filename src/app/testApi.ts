@@ -2,6 +2,7 @@ import type { NoiseEvent } from '../sim/ai/types.ts';
 import type { ItemId } from '../sim/items/items.data.ts';
 import type { Game } from './Game.ts';
 import type { Action } from '../input/actions.ts';
+import type { InstancedMesh, Mesh, Object3D } from 'three';
 
 /** Deterministic hooks for Playwright (`#…&test`). The loop is driven manually. */
 export function installTestApi(game: Game): void {
@@ -36,6 +37,54 @@ export function installTestApi(game: Game): void {
       game.player.teleport({ x, y, z } as never, yaw);
       game.rig.setOrientation(yaw, 0);
     },
+    /** Turns the view toward a world point (from the player's eyes, effective at once). */
+    aim(x: number, y: number, z: number): void {
+      const p = game.player;
+      const dx = x - p.pos.x;
+      const dz = z - p.pos.z;
+      const yaw = Math.atan2(-dx, -dz);
+      const pitch = Math.atan2(y - (p.pos.y + p.eyeHeight()), Math.hypot(dx, dz));
+      game.rig.setOrientation(yaw, pitch);
+      p.yaw = yaw;
+      p.pitch = pitch;
+    },
+    /**
+     * What the visible scene is made of, for budgets: meshes, draw groups and triangles, keyed by
+     * placed prop (or the nearest named ancestor). Ignores frustum culling.
+     */
+    census(): Array<{ key: string; meshes: number; draws: number; tris: number; shadow: number }> {
+      const out = new Map<
+        string,
+        { key: string; meshes: number; draws: number; tris: number; shadow: number }
+      >();
+      game.scene?.traverseVisible((o) => {
+        const m = o as Mesh;
+        if (!m.isMesh) return;
+        let key = '';
+        for (let p: Object3D | null = o; p && !key; p = p.parent) {
+          const prop = p.userData.prop as string | undefined;
+          if (prop) key = `prop:${prop}`;
+          else if (p.name && p.parent) key = p.name;
+        }
+        key ||= m.type;
+        const g = m.geometry;
+        const n = g.index ? g.index.count : (g.attributes.position?.count ?? 0);
+        const inst = (m as InstancedMesh).isInstancedMesh ? (m as InstancedMesh).count : 1;
+        const groups = Array.isArray(m.material) ? Math.max(1, g.groups.length) : 1;
+        const e = out.get(key) ?? { key, meshes: 0, draws: 0, tris: 0, shadow: 0 };
+        e.meshes++;
+        e.draws += groups;
+        e.tris += Math.round((n / 3) * inst);
+        if (m.castShadow) e.shadow += groups;
+        out.set(key, e);
+      });
+      return [...out.values()].sort((a, b) => b.draws - a.draws);
+    },
+    /** Where an interactable is (null if there is none with that id). */
+    where(id: string): [number, number, number] | null {
+      const it = game.interactions.get(id);
+      return it ? [it.pos.x, it.pos.y, it.pos.z] : null;
+    },
     info(): Record<string, unknown> {
       const p = game.player.pos;
       return {
@@ -51,6 +100,7 @@ export function installTestApi(game: Game): void {
         entities: game.entities.map((e) => ({ id: e.id, state: e.state, pos: [e.pos.x, e.pos.y, e.pos.z] })),
         focused: game.interactions.focused?.id ?? null,
         flags: game.flags.toJSON(),
+        mats: [...game.mats],
       };
     },
     /** Uses an interactable by id (bypasses aiming). */

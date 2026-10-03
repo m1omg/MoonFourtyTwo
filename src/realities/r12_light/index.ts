@@ -7,6 +7,7 @@ import { MusicBox, TUNES } from '../../audio/procedural/musicbox.ts';
 import { buildPub } from '../r01_pub/build.ts';
 import { FILM_SECONDS, makeCinematic } from './cinematic.ts';
 import { L12 } from './lines.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 type Phase = 'film' | 'walk' | 'inside' | 'seated' | 'end';
 
@@ -115,6 +116,7 @@ const reality: RealityModule = {
         square: { pos: new Vector3(-4.2, 0, 9.5), yaw: 0, pitch: 0.12 },
       },
       start(cp) {
+        placeBeerMat(game, scope, 'r12', new Vector3(5.7, 2.0, 0.95));
         game.fx.white = 0;
         const town = async () => {
           stoppers.forEach((f) => f());

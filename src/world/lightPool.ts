@@ -1,5 +1,6 @@
 import { PointLight } from 'three';
 import type { Scene, Vector3 } from 'three';
+import { comfort } from '../render/comfort.ts';
 
 export interface Fixture {
   pos: Vector3;
@@ -46,11 +47,12 @@ export class LightPool {
       l.position.copy(r.f.pos);
       l.color.setHex(r.f.color);
       l.distance = r.f.distance;
-      const fl = r.f.flicker
-        ? Math.sin(t * 31 + r.f.flicker * 7) * Math.sin(t * 7.3 + r.f.flicker) > 0.85
-          ? 0.15
-          : 1
-        : 1;
+      const fl =
+        r.f.flicker && !comfort.reduceFlashes
+          ? Math.sin(t * 31 + r.f.flicker * 7) * Math.sin(t * 7.3 + r.f.flicker) > 0.85
+            ? 0.15
+            : 1
+          : 1;
       l.intensity = r.f.intensity * fl * dim;
     });
   }

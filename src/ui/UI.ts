@@ -151,7 +151,7 @@ export class UI {
     });
   }
 
-  showPause(onSettings: () => Promise<void>): Promise<'resume' | 'title'> {
+  showPause(onSettings: () => Promise<void>, info?: string): Promise<'resume' | 'title'> {
     return new Promise((resolve) => {
       const render = () => {
         const bRes = el('button', { type: 'button' }, t('menuResume'));
@@ -159,7 +159,12 @@ export class UI {
         const bTitle = el('button', { type: 'button' }, t('menuQuitToTitle'));
         this.screen(
           'dim',
-          el('div', { class: 'title-block' }, el('h1', { class: 'title' }, t('pauseTitle'))),
+          el(
+            'div',
+            { class: 'title-block' },
+            el('h1', { class: 'title' }, t('pauseTitle')),
+            info ? el('p', { class: 'tagline' }, info) : null,
+          ),
           el('div', { class: 'menu' }, bRes, bSet, bTitle),
         );
         bRes.focus();

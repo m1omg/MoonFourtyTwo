@@ -27,6 +27,7 @@ import { loadVoiceIndex, voiceUrl, type Lines } from '../../narrative/voice.ts';
 import { MusicBox, TUNES } from '../../audio/procedural/musicbox.ts';
 import { Cancelled } from '../../sim/narrative/ScriptRunner.ts';
 import { clamp } from '../../core/damp.ts';
+import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 const E = 'Ežo';
 const O = 'Obsluha';
@@ -586,6 +587,7 @@ const reality: RealityModule = {
         ezo: { pos: playerSeat.clone(), yaw: 0 },
       },
       start(cp) {
+        placeBeerMat(game, scope, 'r3', new Vector3(ezoCell.x + 0.05, 1.6, ezoCell.z + 0.25));
         if (game.flags.has('hall.ezo')) game.giveLight(1);
         stoppers.push(game.synth.hum(0.03));
         stoppers.push(
