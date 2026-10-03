@@ -45,6 +45,8 @@ export class AudioSystem {
   private reverb!: ConvolverNode;
   private reverbIn!: GainNode;
   private reverbOut!: GainNode;
+  /** Delay on the effects bus (sound that arrives late). */
+  private lag: DelayNode | null = null;
   private buffers = new Map<string, Promise<AudioBuffer | null>>();
   private hrtf = true;
   private volumes: Record<Bus | 'master', number> = {
@@ -95,9 +97,12 @@ export class AudioSystem {
     limiter.attack.value = 0.003;
     limiter.release.value = 0.25;
     this.master.connect(limiter).connect(ctx.destination);
+    this.lag = ctx.createDelay(2);
+    this.lag.delayTime.value = 0;
+    this.lag.connect(this.master);
     for (const b of ['music', 'ambience', 'sfx', 'voice', 'ui'] as Bus[]) {
       const g = ctx.createGain();
-      g.connect(this.master);
+      g.connect(b === 'sfx' ? this.lag : this.master);
       this.buses.set(b, g);
     }
     this.reverbIn = ctx.createGain();
@@ -122,6 +127,12 @@ export class AudioSystem {
     const t = this.ctx.currentTime;
     this.master.gain.setTargetAtTime(this.muted ? 0 : this.volumes.master, t, 0.05);
     for (const [b, g] of this.buses) g.gain.setTargetAtTime(this.volumes[b], t, 0.05);
+  }
+
+  /** Makes every sound effect arrive this many seconds late (0 = normal). */
+  setLag(seconds: number): void {
+    if (!this.ctx || !this.lag) return;
+    this.lag.delayTime.setTargetAtTime(Math.min(2, Math.max(0, seconds)), this.ctx.currentTime, 0.1);
   }
 
   /** Procedural impulse response: exponentially decaying stereo noise. */

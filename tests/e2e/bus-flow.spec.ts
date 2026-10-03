@@ -98,9 +98,9 @@ test('the night bus: Ežo’s cap, the ticket, the inspector and the last stop',
   await a.teleport(1.0, 0, 0, -Math.PI / 2);
   await a.sim(0.5);
   await a.teleport(2.2, 0, 0, -Math.PI / 2);
-  // reality 10 isn't built yet, so the preview ends
+  // out onto the pier of reality 10
   expect(
-    await until(page, () => page.evaluate(() => !!document.querySelector('.ending-text')), 30, 0.5),
+    await until(page, async () => (await a.mode()) === 'play' && (await a.info()).reality === 'r10', 60, 0.5),
   ).toBe(true);
   expect(errors).toEqual([]);
 });
