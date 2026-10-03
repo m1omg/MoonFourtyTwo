@@ -12,9 +12,11 @@ export interface DebugOptions {
   seed?: number;
   /** Skip warning/title (dev). */
   quick?: boolean;
+  /** Keep saving checkpoints even in test mode (save/continue tests). */
+  saves?: boolean;
 }
 
-/** Parses `#r5:cp2&q=low&bac=1.5&god&fly&stats&test&seed=7`. */
+/** Parses `#r5:cp2&q=low&bac=1.5&god&fly&stats&test&seed=7&saves`. */
 export function parseDebugHash(hash: string): DebugOptions {
   const h = hash.replace(/^#/, '');
   if (!h) return {};
@@ -36,6 +38,7 @@ export function parseDebugHash(hash: string): DebugOptions {
       out.quick = true;
     } else if (k === 'seed' && v) out.seed = Number(v);
     else if (k === 'quick') out.quick = true;
+    else if (k === 'saves') out.saves = true;
   }
   return out;
 }

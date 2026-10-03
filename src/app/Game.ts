@@ -480,7 +480,7 @@ export class Game {
 
   saveCheckpoint(cp: string): void {
     this.checkpoint = cp;
-    if (this.debug.test) return;
+    if (this.debug.test && !this.debug.saves) return;
     writeSave({
       v: 1,
       reality: this.realityId,
@@ -497,7 +497,7 @@ export class Game {
 
   /** Keeps the collected beer mats in the save right away (they are lore; nothing else changes). */
   keepMats(): void {
-    if (this.debug.test) return;
+    if (this.debug.test && !this.debug.saves) return;
     const s = loadSave();
     if (s) writeSave({ ...s, mats: [...this.mats] });
   }

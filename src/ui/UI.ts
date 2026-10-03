@@ -141,7 +141,14 @@ export class UI {
       const back = el('button', { class: 'btn', type: 'button' }, t('menuBack'));
       this.screen(
         'dim',
-        el('div', { class: 'panel' }, el('h2', {}, t('menuAbout')), el('p', {}, t('aboutBody')), back),
+        el(
+          'div',
+          { class: 'panel' },
+          el('h2', {}, t('menuAbout')),
+          el('p', {}, t('aboutBody')),
+          el('p', {}, t('aboutControls')),
+          back,
+        ),
       );
       back.focus();
       back.addEventListener('click', () => {
