@@ -558,10 +558,10 @@ const reality: RealityModule = {
       ?.scene.getObjectByName('industrial_caged_sconce_a');
     if (sconceSrc) {
       const tpl = centeredOnBack(sconceSrc);
-      instanceModel(tpl, sconces, scene);
+      instanceModel(tpl, sconces, scene, { scope });
     }
     const hangSrc = props.gltf('caged_hanging_light')?.scene;
-    if (hangSrc) instanceModel(hangSrc, hanging, scene);
+    if (hangSrc) instanceModel(hangSrc, hanging, scene, { scope });
     const pool = new LightPool(scene, fixtures, game.renderer.profile.tier === 'low' ? 4 : 6);
     const bulbs = new InstancedMesh(
       scope.add(new SphereGeometry(0.045, 8, 6)),

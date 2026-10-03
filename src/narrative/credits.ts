@@ -4,4 +4,8 @@ export const CREDITS: Array<[string, string]> = [
   ['Pre', 'm1omg'],
   ['Modely a textúry', 'Poly Haven, ambientCG (CC0)'],
   ['Postavy', 'Higgsfield, Krea'],
+  ['Hlas Eža', 'ElevenLabs (cez Krea)'],
+  ['Hudba a zvuky', 'syntetizované priamo v prehliadači'],
+  ['Písma', 'Spectral, IBM Plex Sans Condensed (OFL)'],
+  ['Technika', 'three.js, postprocessing, three-mesh-bvh'],
 ];

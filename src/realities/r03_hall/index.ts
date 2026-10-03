@@ -14,9 +14,10 @@ import {
   PointLight,
   Vector3,
 } from 'three';
+import type { BufferGeometry } from 'three';
 import type { RealityModule } from '../../world/Reality.ts';
 import { Props } from '../../world/props.ts';
-import { instanceModelChunked, type InstanceXform } from '../../world/instancing.ts';
+import { farParts, instanceModelChunked, type InstanceXform } from '../../world/instancing.ts';
 import { Tableware } from '../../world/objects/tableware.ts';
 import { Character } from '../../npc/Character.ts';
 import { NavGrid, Area } from '../../sim/ai/nav/NavGrid.ts';
@@ -28,6 +29,7 @@ import { MusicBox, TUNES } from '../../audio/procedural/musicbox.ts';
 import { Cancelled } from '../../sim/narrative/ScriptRunner.ts';
 import { clamp } from '../../core/damp.ts';
 import { placeBeerMat } from '../../world/objects/beermats.ts';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const E = 'Ežo';
 const O = 'Obsluha';
@@ -153,23 +155,23 @@ const reality: RealityModule = {
     const rainTex = scope.add(new CanvasTexture(rainCanvas));
     rainTex.colorSpace = 'srgb';
     const rainMat = scope.add(new MeshBasicMaterial({ map: rainTex, toneMapped: false }));
-    const winGeo = scope.add(new PlaneGeometry(1.4, 1.4));
-    const winMeshes: Mesh[] = [];
+    const winGeos: BufferGeometry[] = [];
     const addWindows = (axis: 'x' | 'z', fixed: number, facing: number) => {
       for (let a = 6; a < 80 - 3; a += 7) {
-        const m = new Mesh(winGeo, rainMat);
         const c = -HALF + a;
-        if (axis === 'x') m.position.set(c, 1.7, fixed);
-        else m.position.set(fixed, 1.7, c);
-        m.rotation.y = facing;
-        scene.add(m);
-        winMeshes.push(m);
+        const g = new PlaneGeometry(1.4, 1.4).rotateY(facing);
+        if (axis === 'x') g.translate(c, 1.7, fixed);
+        else g.translate(fixed, 1.7, c);
+        winGeos.push(g);
       }
     };
     addWindows('x', -HALF + 0.16, 0);
     addWindows('x', HALF - 0.16, Math.PI);
     addWindows('z', -HALF + 0.16, Math.PI / 2);
     addWindows('z', HALF - 0.16, -Math.PI / 2);
+    // all the windows are one mesh (one draw call, not forty-four)
+    scene.add(new Mesh(scope.add(mergeGeometries(winGeos)), rainMat));
+    for (const g of winGeos) g.dispose();
 
     // ───────── layout ─────────
     const nav = new NavGrid(160, 160, 0.5, -HALF, -HALF);
@@ -261,13 +263,22 @@ const reality: RealityModule = {
 
     const tableModel = props.gltf('WoodenTable_03')?.scene;
     const chairModel = props.gltf('painted_wooden_chair_02')?.scene;
-    if (tableModel) instanceModelChunked(tableModel, tables, scene, 20);
+    // far chunks of furniture are drawn simplified (most of the hall is far away)
+    const farFrom = { low: 16, med: 24, high: 32 }[game.renderer.profile.tier];
+    if (tableModel)
+      instanceModelChunked(tableModel, tables, scene, 12, {
+        scope,
+        far: await farParts(tableModel, 0.3, farFrom, scope),
+      });
     if (chairModel) {
       chairModel.traverse((o) => {
         const m = o as Mesh;
         if (m.isMesh) (m.material as MeshStandardMaterial).color.setHex(0x6b4a33);
       });
-      instanceModelChunked(chairModel, chairs, scene, 20);
+      instanceModelChunked(chairModel, chairs, scene, 12, {
+        scope,
+        far: await farParts(chairModel, 0.3, farFrom, scope),
+      });
     }
     // pillars (instanced boxes)
     const pillarMesh = new InstancedMesh(
@@ -289,7 +300,8 @@ const reality: RealityModule = {
         proto,
         glassesAt.map((g) => ({ x: g.x, y: g.y, z: g.z, rotY: (g.x * 13.1 + g.z * 7.7) % 6.28 })),
         scene,
-        20,
+        12,
+        { scope },
       );
     }
 
@@ -388,6 +400,15 @@ const reality: RealityModule = {
     // ───────── atmosphere ─────────
     scene.background = new Color(0x3a3622);
     scene.fog = new FogExp2(0x3a3622, 0.036);
+    // past ~60 m the fog hides everything (99 %): do not draw what nobody can see
+    const cam = game.renderer.camera;
+    const far0 = cam.far;
+    cam.far = 62;
+    cam.updateProjectionMatrix();
+    scope.onDispose(() => {
+      cam.far = far0;
+      cam.updateProjectionMatrix();
+    });
     game.grade = {
       lift: [0.01, 0.012, 0.0],
       gamma: [1.0, 1.02, 1.04],

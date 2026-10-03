@@ -30,7 +30,7 @@ import { Synth } from '../audio/procedural/synth.ts';
 import { AssetLoader } from '../assets/Loader.ts';
 import { GameRenderer } from '../render/Renderer.ts';
 import { CameraRig } from '../render/CameraRig.ts';
-import { detectTier, type QualityTier } from '../render/quality.ts';
+import { cheapenGlass, detectTier, type QualityTier } from '../render/quality.ts';
 import { NEUTRAL_GRADE, type GradeParams } from '../render/post/GradeEffect.ts';
 import { CollisionWorld, Layer } from '../sim/physics/CollisionWorld.ts';
 import { PlayerController, type FootstepEvent } from '../sim/player/Controller.ts';
@@ -44,6 +44,7 @@ import type { Entity } from '../sim/ai/Entity.ts';
 import type { AIContext, NoiseEvent, PlayerView } from '../sim/ai/types.ts';
 import type { NavGrid } from '../sim/ai/nav/NavGrid.ts';
 import { Builder } from '../world/kit/Builder.ts';
+import { propDetail } from '../world/props.ts';
 import { MaterialLib } from '../world/materials.ts';
 import type { RealityInstance, RealityModule } from '../world/Reality.ts';
 import { REALITIES, REALITY_ORDER, realityExists } from '../realities/registry.ts';
@@ -355,6 +356,10 @@ export class Game {
       const loading = this.ui.showLoading(this.rng.int(0, 5));
       this.disposeReality();
       const mod = (await REALITIES[target]!()).default;
+      // phones: no model over 9000 triangles or with textures over 512 pixels
+      const low = this.renderer.profile.tier === 'low';
+      propDetail.maxTris = low ? 9000 : Infinity;
+      propDetail.maxTexture = low ? 512 : Infinity;
       const scene = new Scene();
       scene.background = new Color(0x000000);
       const scope = new Scope();
@@ -394,6 +399,7 @@ export class Game {
       scene.add(this.renderer.camera);
       this.renderer.setScene(scene);
       if (this.renderer.profile.ao) this.renderer.rebuild();
+      if (this.renderer.profile.tier === 'low') cheapenGlass(scene);
       try {
         await this.renderer.renderer.compileAsync(scene, this.renderer.camera);
       } catch {
@@ -979,6 +985,7 @@ export class Game {
 
   private render(alpha: number, frameDt: number): void {
     this.renderTime = this.clock.time + alpha * SIM_DT;
+    this.renderer.noteFrame(frameDt);
     this.input.pollGamepad(frameDt);
     const look = this.input.consumeLook();
     if (this.mode === 'play' && !this.loop.paused) this.rig.applyLook(look.dx, look.dy);
@@ -1049,10 +1056,12 @@ export class Game {
     const d = steady ? 0 : clamp((bac - 0.4) / 2.4, 0, 1);
     const absinthe = st.buffs.has('absinthe') ? 1 : 0;
     const fear = st.fear.value;
+    // the comfort slider tones the drunk view down too (never all the way: you should know you are drunk)
+    const k = 0.35 + 0.65 * m;
     this.renderer.drunk.set({
-      double: steady ? 0 : clamp((bac - 1.1) / 1.6, 0, 1) * (0.55 + 0.45 * Math.sin(t * 0.37) ** 2),
-      aberr: clamp(d * 0.6 + fear * 0.5 + absinthe * 0.6, 0, 1.4),
-      blur: steady ? 0 : clamp((bac - 2.0) / 1.0, 0, 1) * 0.7,
+      double: steady ? 0 : clamp((bac - 1.1) / 1.6, 0, 1) * (0.55 + 0.45 * Math.sin(t * 0.37) ** 2) * k,
+      aberr: clamp(d * 0.6 + fear * 0.5 + absinthe * 0.6, 0, 1.4) * k,
+      blur: steady ? 0 : clamp((bac - 2.0) / 1.0, 0, 1) * 0.7 * k,
       dirX: Math.cos(t * 0.21),
       dirY: Math.sin(t * 0.17) * 0.3,
     });

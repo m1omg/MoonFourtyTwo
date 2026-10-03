@@ -1,3 +1,5 @@
+import type { Material, Mesh, MeshPhysicalMaterial, Object3D } from 'three';
+
 export type QualityTier = 'low' | 'med' | 'high';
 export type QualitySetting = QualityTier | 'auto';
 
@@ -70,4 +72,27 @@ export function detectTier(gl: WebGL2RenderingContext | null): QualityTier {
   if (/swiftshader|llvmpipe|software/.test(renderer)) return 'low';
   if (/intel|uhd|iris/.test(renderer) && !/arc/.test(renderer)) return 'med';
   return 'high';
+}
+
+/**
+ * Real glass (transmission) makes three.js draw every opaque object a second time, for what shows
+ * through it. On the low preset glass is merely see-through instead.
+ */
+export function cheapenGlass(root: Object3D): void {
+  const done = new Set<Material>();
+  root.traverse((o) => {
+    const m = o as Mesh;
+    if (!m.isMesh) return;
+    for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
+      const g = mat as MeshPhysicalMaterial;
+      if (done.has(g) || !(g.transmission > 0)) continue;
+      done.add(g);
+      g.opacity = Math.min(g.opacity, 1 - 0.6 * g.transmission);
+      g.transmission = 0;
+      g.transparent = true;
+      g.depthWrite = false;
+      // one draw, not back faces and then front faces
+      g.forceSinglePass = true;
+    }
+  });
 }

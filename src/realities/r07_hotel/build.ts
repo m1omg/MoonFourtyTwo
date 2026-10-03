@@ -407,7 +407,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
       { x: 11 + i * 1.3, y: 0, z: 13.5, rotY: Math.PI },
     );
   const chairSrc = props.gltf('painted_wooden_chair_02')?.scene;
-  if (chairSrc) instanceModel(chairSrc, chairs, scene);
+  if (chairSrc) instanceModel(chairSrc, chairs, scene, { scope });
 
   // ───────── the corridor ─────────
   const C = CORRIDOR;

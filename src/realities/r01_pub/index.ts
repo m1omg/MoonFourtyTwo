@@ -570,6 +570,8 @@ const reality: RealityModule = {
     tvCam.layers.enable(TV_LAYER);
     pub.tvFigure.traverse((o) => o.layers.set(TV_LAYER));
     let tvRtAt = 0;
+    // the feed redraws the whole pub: 12 times a second, 6 on the low preset
+    const tvInterval = game.renderer.profile.tier === 'low' ? 1 / 6 : 1 / 12;
 
     function swapToFrozen(): void {
       if (s.swapped) return;
@@ -867,7 +869,7 @@ const reality: RealityModule = {
             );
         }
         // TV shows the ceiling camera in the frozen pub
-        if (s.phase === 'r2' && t - tvRtAt > 1 / 12) {
+        if (s.phase === 'r2' && t - tvRtAt > tvInterval) {
           tvRtAt = t;
           const r = game.renderer.renderer;
           tvCam.lookAt(game.player.pos.x, 1.0, game.player.pos.z);

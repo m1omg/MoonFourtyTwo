@@ -101,6 +101,8 @@ const reality: RealityModule = {
         }
       });
     pub.lampMeshes.forEach(unlit);
+    // the bare bulbs glow by themselves (unlit materials): out with them
+    for (const m of [...pub.lampMeshes, pub.wcBulb]) m.visible = false;
     scene.traverse((o) => {
       if (o.userData.prop === 'hanging_industrial_lamp') unlit(o);
     });

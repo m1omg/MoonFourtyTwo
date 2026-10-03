@@ -19,6 +19,7 @@ import {
 import { N8AOPostPass } from 'n8ao';
 import { DrunkEffect, WarpEffect } from './post/DrunkEffect.ts';
 import { GradeEffect } from './post/GradeEffect.ts';
+import { ResolutionGovernor } from './resGovernor.ts';
 import { PROFILES, type QualityProfile, type QualityTier } from './quality.ts';
 
 /** WebGL renderer + post-processing chain + dynamic resolution. */
@@ -31,8 +32,8 @@ export class GameRenderer {
   readonly bloom: BloomEffect;
   readonly toneMapping: ToneMappingEffect;
   profile: QualityProfile;
-  /** Dynamic resolution scale (0..1] applied on top of the pixel-ratio cap. */
-  resScale = 1;
+  /** Dynamic resolution: its scale (0..1] applies on top of the pixel-ratio cap. */
+  private readonly governor: ResolutionGovernor;
   /** Disable automatic resolution changes (tests, user preference). */
   dynamicRes = true;
 
@@ -41,8 +42,6 @@ export class GameRenderer {
   private aoPass: N8AOPostPass | null = null;
   private drunkPass!: EffectPass;
   private scene: Scene | null = null;
-  private frameTimes: number[] = [];
-  private sinceResChange = 0;
   private width = 1;
   private height = 1;
 
@@ -73,6 +72,7 @@ export class GameRenderer {
     });
     this.toneMapping = new ToneMappingEffect({ mode: ToneMappingMode.AGX });
     this.profile = PROFILES[tier];
+    this.governor = new ResolutionGovernor(this.profile.dynResMin);
     this.buildComposer();
     this.resize();
   }
@@ -92,7 +92,7 @@ export class GameRenderer {
   setProfile(tier: QualityTier): void {
     if (tier === this.profile.tier) return;
     this.profile = PROFILES[tier];
-    this.resScale = 1;
+    this.governor.reset(this.profile.dynResMin);
     this.buildComposer();
     this.resize();
   }
@@ -135,7 +135,7 @@ export class GameRenderer {
     const h = Math.max(1, this.canvas.clientHeight || window.innerHeight);
     this.width = w;
     this.height = h;
-    const dpr = Math.min(window.devicePixelRatio || 1, this.profile.pixelRatioCap) * this.resScale;
+    const dpr = Math.min(window.devicePixelRatio || 1, this.profile.pixelRatioCap) * this.governor.scale;
     this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
     this.composer.setSize(w, h, false);
@@ -149,27 +149,16 @@ export class GameRenderer {
     this.drunkPass.enabled = this.drunk.active;
     this.renderer.info.reset();
     this.composer.render(frameDt);
-    if (this.dynamicRes) this.governResolution(frameDt);
+    if (this.dynamicRes && this.governor.update(frameDt)) this.resize();
   }
 
-  private governResolution(frameDt: number): void {
-    if (frameDt <= 0) return;
-    this.frameTimes.push(frameDt);
-    if (this.frameTimes.length > 45) this.frameTimes.shift();
-    this.sinceResChange += frameDt;
-    if (this.sinceResChange < 1.2 || this.frameTimes.length < 30) return;
-    const sorted = [...this.frameTimes].sort((a, b) => a - b);
-    const median = sorted[sorted.length >> 1]!;
-    // Target ~60 fps; never chase high refresh rates (that is what the fixed step is for).
-    let next = this.resScale;
-    if (median > 1 / 50) next = Math.max(this.profile.dynResMin, this.resScale - 0.08);
-    else if (median < 1 / 58 && this.resScale < 1) next = Math.min(1, this.resScale + 0.05);
-    if (Math.abs(next - this.resScale) > 1e-3) {
-      this.resScale = next;
-      this.sinceResChange = 0;
-      this.frameTimes.length = 0;
-      this.resize();
-    }
+  /** Every frame, drawn or not: lets the resolution governor learn the display's pace. */
+  noteFrame(frameDt: number): void {
+    this.governor.noteFrame(frameDt);
+  }
+
+  get resScale(): number {
+    return this.governor.scale;
   }
 
   get info(): { calls: number; triangles: number; textures: number; geometries: number; programs: number } {

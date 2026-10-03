@@ -51,7 +51,7 @@ jobs:
           name: dist
           path: dist
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test --project=desktop
+      - run: npx playwright test
         env:
           REALITIES: r0,r1,r3,r4,r5,r6,r7,r8,r9,r10,r11,r12
       - uses: actions/upload-artifact@v4

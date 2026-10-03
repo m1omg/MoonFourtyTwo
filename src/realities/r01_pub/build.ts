@@ -50,6 +50,8 @@ export interface Pub {
   lampMeshes: Mesh[];
   barLight: PointLight;
   wcLight: PointLight;
+  /** The WC's ceiling lamp (its glass). */
+  wcBulb: Mesh;
   streetLights: PointLight[];
   windowFigure: Object3D;
   tvFigure: Object3D;
@@ -532,14 +534,22 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   const mirror = new Mesh(
     scope.add(new PlaneGeometry(0.55, 0.75)),
     scope.add(
-      new MeshStandardMaterial({ color: 0x9aa4aa, metalness: 1, roughness: 0.05, envMapIntensity: 1.2 }),
+      // an old, clouded mirror (a perfect one would only reflect the black of a missing env map)
+      new MeshStandardMaterial({ color: 0x6e777c, metalness: 0.35, roughness: 0.3 }),
     ),
   );
   mirror.position.set(-7.9, 1.45, -3.09);
   scene.add(mirror);
-  const wcLight = new PointLight(0xe0f0ff, 2.2, 5, 1.6);
+  // one frosted ceiling lamp, cold and a little too bright, as in every pub toilet
+  const wcLight = new PointLight(0xe0f0ff, 5.5, 6, 1.6);
   wcLight.position.set(-7.5, 2.4, -1.5);
   scene.add(wcLight);
+  const wcBulb = new Mesh(
+    scope.add(new SphereGeometry(0.13, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI)),
+    scope.add(new MeshBasicMaterial({ color: 0xe8f2ff, toneMapped: false })),
+  );
+  wcBulb.position.set(-7.5, 2.6, -1.5);
+  scene.add(wcBulb);
   const wcDoor = new Door(scope, game.world, [-6.0, 0, -0.75], Math.PI / 2, 0.9, 2.08, doorMat, 1, 0.05);
   scene.add(wcDoor.pivot);
 
@@ -621,6 +631,7 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
     lampMeshes,
     barLight,
     wcLight,
+    wcBulb,
     streetLights,
     windowFigure,
     tvFigure,

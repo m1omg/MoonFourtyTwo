@@ -2,7 +2,8 @@ import type { NoiseEvent } from '../sim/ai/types.ts';
 import type { ItemId } from '../sim/items/items.data.ts';
 import type { Game } from './Game.ts';
 import type { Action } from '../input/actions.ts';
-import type { InstancedMesh, Mesh, Object3D } from 'three';
+import { DoubleSide } from 'three';
+import type { InstancedMesh, Line, Material, Mesh, Object3D, Points, Sprite, Texture } from 'three';
 
 /** Deterministic hooks for Playwright (`#…&test`). The loop is driven manually. */
 export function installTestApi(game: Game): void {
@@ -59,18 +60,33 @@ export function installTestApi(game: Game): void {
       >();
       game.scene?.traverseVisible((o) => {
         const m = o as Mesh;
-        if (!m.isMesh) return;
+        const kind = m.isMesh
+          ? ''
+          : (o as Sprite).isSprite
+            ? 'sprite'
+            : (o as Points).isPoints
+              ? 'points'
+              : (o as Line).isLine
+                ? 'line'
+                : null;
+        if (kind === null) return;
+        // a placed prop is counted as a whole; otherwise by the nearest name
         let key = '';
-        for (let p: Object3D | null = o; p && !key; p = p.parent) {
+        let named = '';
+        for (let p: Object3D | null = o; p; p = p.parent) {
           const prop = p.userData.prop as string | undefined;
           if (prop) key = `prop:${prop}`;
-          else if (p.name && p.parent) key = p.name;
+          if (!named && p.name && p.parent) named = p.name;
         }
-        key ||= m.type;
+        key ||= named || o.type;
+        if (kind) key = `${kind}:${key}`;
         const g = m.geometry;
         const n = g.index ? g.index.count : (g.attributes.position?.count ?? 0);
         const inst = (m as InstancedMesh).isInstancedMesh ? (m as InstancedMesh).count : 1;
-        const groups = Array.isArray(m.material) ? Math.max(1, g.groups.length) : 1;
+        const mats = (Array.isArray(m.material) ? m.material : [m.material]) as Material[];
+        // transparent double-sided materials are drawn twice (back faces, then front faces)
+        const passes = mats.some((x) => x.transparent && x.side === DoubleSide && !x.forceSinglePass) ? 2 : 1;
+        const groups = (Array.isArray(m.material) ? Math.max(1, g.groups.length) : 1) * passes;
         const e = out.get(key) ?? { key, meshes: 0, draws: 0, tris: 0, shadow: 0 };
         e.meshes++;
         e.draws += groups;
@@ -79,6 +95,48 @@ export function installTestApi(game: Game): void {
         out.set(key, e);
       });
       return [...out.values()].sort((a, b) => b.draws - a.draws);
+    },
+    /** Rough GPU memory of the scene's textures in MB (RGBA8 with mipmaps), by size. */
+    textureMemory(): { mb: number; bySize: Record<string, number> } {
+      const seen = new Set<Texture>();
+      const bySize: Record<string, number> = {};
+      let bytes = 0;
+      game.scene?.traverse((o) => {
+        const m = o as Mesh;
+        if (!m.material) return;
+        for (const mat of (Array.isArray(m.material) ? m.material : [m.material]) as Material[])
+          for (const v of Object.values(mat)) {
+            const t = v as Texture | null;
+            if (!t || !t.isTexture || seen.has(t)) continue;
+            seen.add(t);
+            const img = t.image as { width?: number; height?: number } | undefined;
+            const w = img?.width ?? 0;
+            const h = img?.height ?? 0;
+            const k = `${w}x${h}`;
+            bySize[k] = (bySize[k] ?? 0) + 1;
+            bytes += w * h * 4 * (t.generateMipmaps ? 4 / 3 : 1);
+          }
+      });
+      return { mb: Math.round(bytes / 1e5) / 10, bySize };
+    },
+    /** Renders one frame and counts how often each object was actually drawn (all passes). */
+    drawsInFrame(): Array<{ key: string; draws: number }> {
+      const counts = new Map<string, number>();
+      const restore: Array<() => void> = [];
+      game.scene?.traverse((o) => {
+        const prev = o.onBeforeRender;
+        let key = o.name || o.type;
+        for (let p: Object3D | null = o; p; p = p.parent)
+          if (p.userData.prop) key = `prop:${p.userData.prop as string}`;
+        o.onBeforeRender = function (...args) {
+          counts.set(key, (counts.get(key) ?? 0) + 1);
+          prev.apply(this, args);
+        };
+        restore.push(() => (o.onBeforeRender = prev));
+      });
+      game.loop.manualFrames(1, 60);
+      restore.forEach((f) => f());
+      return [...counts].map(([key, draws]) => ({ key, draws })).sort((a, b) => b.draws - a.draws);
     },
     /** Where an interactable is (null if there is none with that id). */
     where(id: string): [number, number, number] | null {
@@ -91,6 +149,8 @@ export function installTestApi(game: Game): void {
         reality: game.realityId,
         checkpoint: game.checkpoint,
         pos: [p.x, p.y, p.z],
+        yaw: game.rig.yaw,
+        pitch: game.rig.pitch,
         grounded: game.player.grounded,
         bac: game.status.intox.bac,
         fear: game.status.fear.value,

@@ -391,7 +391,7 @@ export async function buildSpa(ctx: RealityCtx): Promise<Spa> {
     rotY: Math.PI + (i % 2) * 0.2,
   }));
   const monobloc = props.gltf('plastic_monobloc_chair_01')?.scene;
-  if (monobloc) instanceModel(monobloc, chairX, scene);
+  if (monobloc) instanceModel(monobloc, chairX, scene, { scope });
   for (const c of chairX) b.box([c.x - 0.3, 0, c.z - 0.3], [c.x + 0.3, 0.85, c.z + 0.3], null);
   for (const [x, z, r] of [
     [-19.8, -12, Math.PI / 2],
@@ -733,7 +733,7 @@ export async function buildSpa(ctx: RealityCtx): Promise<Spa> {
     { x: -25, y: 4, z: -22 },
   ];
   const tubeSrc = props.gltf('mounted_fluorescent_lights')?.scene;
-  if (tubeSrc) instanceModel(tubeSrc, tubes, scene);
+  if (tubeSrc) instanceModel(tubeSrc, tubes, scene, { scope });
 
   // ───────── navigation ─────────
   const nav = new NavGrid(136, 146, 0.5, -31, -56);
