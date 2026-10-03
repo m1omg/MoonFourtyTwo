@@ -72,9 +72,9 @@ test('the valley: Ežo’s torch, batteries, Čierne at the shelter and the bus'
   expect(await a.use('cierne')).toBe(true);
   expect((await a.info()).checkpoint).toBe('shelter');
   await a.press('drink');
-  // the hole evaporates, the dark, the bus (reality 9 isn't built yet, so the preview ends)
+  // the hole evaporates, the dark, the bus: on board, in reality 9
   expect(
-    await until(page, () => page.evaluate(() => !!document.querySelector('.ending-text')), 40, 0.5),
+    await until(page, async () => (await a.mode()) === 'play' && (await a.info()).reality === 'r9', 60, 0.5),
   ).toBe(true);
   expect(errors).toEqual([]);
 });

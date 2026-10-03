@@ -513,6 +513,32 @@ export class Synth {
     vib.stop(t + 0.22);
   }
 
+  /** A bell: the bus announcement gong (two falling tones) or a single ding. */
+  chime(pos?: Vector3, notes: number[] = [784, 622], volume = 0.16): void {
+    const o = this.out('sfx', pos, 1.2);
+    if (!o) return;
+    const { ctx, node } = o;
+    notes.forEach((f, i) => {
+      const t = ctx.currentTime + i * 0.42;
+      for (const [mul, a] of [
+        [1, 1],
+        [2.01, 0.25],
+        [3.02, 0.08],
+      ] as const) {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = f * mul;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(volume * a, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+        osc.connect(g).connect(node);
+        osc.start(t);
+        osc.stop(t + 1.45);
+      }
+    });
+  }
+
   /** Sudden dissonant stinger for scares. */
   stinger(strength = 1): void {
     const o = this.out('sfx');
