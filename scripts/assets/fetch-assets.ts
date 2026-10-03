@@ -65,12 +65,14 @@ async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<void>): Prom
   );
 }
 
-async function fetchTexture(id: string): Promise<void> {
+/** A texture entry is a Poly Haven id, optionally with a colour variant: `fabric_pattern_07:col_1`. */
+async function fetchTexture(entry: string): Promise<void> {
+  const [id, colour] = entry.split(':') as [string, string | undefined];
   const files = await json<Record<string, Record<string, Record<string, PhFile>>>>(
     `https://api.polyhaven.com/files/${id}`,
   );
   const maps: Array<[string, string]> = [
-    ['Diffuse', 'diff'],
+    [colour ?? 'Diffuse', 'diff'],
     ['nor_gl', 'nor'],
     ['arm', 'arm'],
   ];
@@ -140,7 +142,11 @@ async function fetchHdri(id: string): Promise<void> {
 }
 
 const want = (id: string) => !only || only.has(id);
-await pool(TEXTURES.filter(want), 4, fetchTexture);
+await pool(
+  TEXTURES.filter((t) => want(t.split(':')[0]!)),
+  4,
+  fetchTexture,
+);
 await pool(
   [...MODELS, ...MODELS_EXTRA].filter((m) => want(m.id)),
   3,

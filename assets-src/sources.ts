@@ -3,7 +3,10 @@
  * Keys are the Poly Haven asset ids; they are also the local names under public/assets/.
  */
 
-/** PBR texture sets used by kit materials (public/assets/tex/<id>/{1k,512}_{diff,nor,arm}.jpg). */
+/**
+ * PBR texture sets used by kit materials (public/assets/tex/<id>/{1k,512}_{diff,nor,arm}.jpg).
+ * Sets that come in colour variants name the one to use after a colon.
+ */
 export const TEXTURES: string[] = [
   'brown_floor_tiles',
   'dark_paneled_wood',
@@ -24,6 +27,12 @@ export const TEXTURES: string[] = [
   'rounded_square_tiled_wall',
   'anti_skid_tiles',
   'terrazzo_tiles',
+  'old_linoleum_flooring_01',
+  'herringbone_parquet',
+  'decrepit_wallpaper',
+  'fabric_pattern_07:col_1',
+  'peeling_painted_wall',
+  'painted_plaster_wall',
 ];
 
 /** Models (public/assets/models/<id>.glb), textures capped at maxTex. */
@@ -84,4 +93,7 @@ export const MODELS_EXTRA: Array<{ id: string; maxTex?: number; simplify?: numbe
   { id: 'potted_plant_02', maxTex: 512, simplify: 0.15 },
   { id: 'mounted_fluorescent_lights', maxTex: 512, simplify: 0.4 },
   { id: 'painted_wooden_bench', maxTex: 512 },
+  { id: 'vintage_cabinet_01', maxTex: 512, simplify: 0.3 },
+  { id: 'painted_wooden_cabinet', maxTex: 512 },
+  { id: 'vintage_electric_kettle', maxTex: 256, simplify: 0.3 },
 ];

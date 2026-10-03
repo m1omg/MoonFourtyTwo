@@ -272,6 +272,8 @@ export class Game {
     } else {
       clearSave();
       this.flags.load({});
+      this.hasLight = false;
+      this.lightOn = false;
       this.inventory.clear();
       this.status.reset(0);
       this.mats = [];
@@ -283,6 +285,11 @@ export class Game {
 
   private restoreSave(s: SaveData): void {
     this.flags.load(s.flags);
+    // saves from before the lighter was remembered: Ežo gave it in the hall
+    const light = this.flags.get('lighter') || (this.flags.has('hall.ezo') ? 1 : 0);
+    this.hasLight = light > 0;
+    this.lightPower = light || 1;
+    this.lightOn = false;
     this.inventory.load(s.inventory);
     this.inventory.select(s.selected);
     this.status.reset(s.bac);
@@ -545,6 +552,8 @@ export class Game {
   giveLight(power = 1): void {
     this.hasLight = true;
     this.lightPower = power;
+    // remembered in the save (the lighter stays in your pocket across realities)
+    this.flags.put('lighter', power);
   }
 
   // ───────────────────────────── simulation ─────────────────────────────

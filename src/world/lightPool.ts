@@ -31,7 +31,9 @@ export class LightPool {
   }
 
   update(cam: Vector3, t: number, dim = 1): void {
+    // lamps switched off (intensity 0) give their slot to the next nearest one
     const ranked = this.fixtures
+      .filter((f) => f.intensity > 0)
       .map((f) => ({ f, d: f.pos.distanceToSquared(cam) }))
       .sort((a, b) => a.d - b.d)
       .slice(0, this.lights.length);

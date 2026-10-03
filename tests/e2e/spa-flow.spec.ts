@@ -83,12 +83,12 @@ test('the spa: ducks, Ežo, the pump room, the key, the door and the whirlpool',
   expect(await a.use('diveDoor')).toBe(true);
   expect(await flag(page, 'spa.door')()).toBe(true);
 
-  // off the springboard into the whirlpool; reality 6 isn't built yet, so the preview ends
+  // off the springboard into the whirlpool, and out of a bathtub in reality 6
   await a.teleport(28, 0.9, -20.8, 0);
   await a.sim(0.3);
   expect(await a.use('board')).toBe(true);
   expect(
-    await until(page, () => page.evaluate(() => !!document.querySelector('.ending-text')), 40, 0.25),
+    await until(page, async () => (await a.info()).reality === 'r6' && (await a.mode()) === 'play', 60, 0.5),
   ).toBe(true);
   expect(errors).toEqual([]);
 });

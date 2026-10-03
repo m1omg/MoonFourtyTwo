@@ -388,6 +388,104 @@ export class Synth {
     osc.stop(t + 0.04);
   }
 
+  /** A door hinge creaking: a stick-slip sawtooth through a resonant band. */
+  creak(pos?: Vector3, seconds = 1.2, volume = 0.16): void {
+    const o = this.out('sfx', pos, 1.5);
+    if (!o) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    const f0 = 60 + this.rng.next() * 30;
+    osc.frequency.setValueAtTime(f0, t);
+    const n = Math.max(3, Math.round(seconds * 7));
+    for (let i = 1; i <= n; i++)
+      osc.frequency.linearRampToValueAtTime(f0 * (0.7 + this.rng.next() * 1.1), t + (seconds * i) / n);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900 + this.rng.next() * 600;
+    bp.Q.value = 7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(volume, t + 0.08);
+    g.gain.setValueAtTime(volume, t + seconds * 0.75);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    osc.connect(bp).connect(g).connect(node);
+    osc.start(t);
+    osc.stop(t + seconds + 0.05);
+  }
+
+  /** A security chain rattling in its slot: a quick run of small metal clinks. */
+  rattle(pos?: Vector3, strength = 1): void {
+    const o = this.out('sfx', pos, 1.5);
+    if (!o) return;
+    const { ctx, node } = o;
+    let t = ctx.currentTime;
+    for (let i = 0; i < 9; i++) {
+      t += 0.035 + this.rng.next() * 0.05;
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = 2600 + this.rng.next() * 2400;
+      const g = ctx.createGain();
+      const a = (0.05 + this.rng.next() * 0.06) * strength;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(a, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+      osc.connect(g).connect(node);
+      osc.start(t);
+      osc.stop(t + 0.08);
+    }
+  }
+
+  /** A door falling shut / a dull knock: a low pitched-down thump. */
+  thud(pos?: Vector3, strength = 1): void {
+    const o = this.out('sfx', pos, 2);
+    if (!o) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(120, t);
+    osc.frequency.exponentialRampToValueAtTime(48, t + 0.18);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.5 * strength, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    osc.connect(g).connect(node);
+    osc.start(t);
+    osc.stop(t + 0.4);
+    this.click(pos, 700, 0.08 * strength);
+  }
+
+  /** An old intercom / door buzzer: a harsh, mains-modulated square wave. */
+  buzzer(pos?: Vector3, seconds = 0.8, volume = 0.12): void {
+    const o = this.out('sfx', pos, 1.2);
+    if (!o) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = 230;
+    const am = ctx.createOscillator();
+    am.frequency.value = 50;
+    const amg = ctx.createGain();
+    amg.gain.value = volume * 0.5;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(volume, t + 0.01);
+    g.gain.setValueAtTime(volume, t + seconds);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.04);
+    am.connect(amg).connect(g.gain);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2400;
+    osc.connect(lp).connect(g).connect(node);
+    osc.start(t);
+    am.start(t);
+    osc.stop(t + seconds + 0.06);
+    am.stop(t + seconds + 0.06);
+  }
+
   /** Sudden dissonant stinger for scares. */
   stinger(strength = 1): void {
     const o = this.out('sfx');

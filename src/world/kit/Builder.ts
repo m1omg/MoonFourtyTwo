@@ -28,6 +28,46 @@ interface SurfaceZone {
 }
 
 /**
+ * Solid parts of a wall with openings, as [s0, s1, y0, y1] boxes along the wall. The wall is cut into
+ * vertical strips at every opening edge; in each strip the solid parts are whatever no opening
+ * covers, so openings may sit side by side or stacked above each other (a door on every floor).
+ */
+export function wallSegments(
+  len: number,
+  y0: number,
+  y1: number,
+  openings: Opening[],
+): Array<[number, number, number, number]> {
+  const holes = openings
+    .map((o) => ({
+      s0: Math.max(0, o.at - o.width / 2),
+      s1: Math.min(len, o.at + o.width / 2),
+      b: Math.max(y0, o.bottom),
+      t: Math.min(y1, o.top),
+    }))
+    .filter((h) => h.s1 - h.s0 > 1e-4 && h.t - h.b > 1e-4);
+  const cuts = [...new Set([0, len, ...holes.flatMap((h) => [h.s0, h.s1])])].sort((p, q) => p - q);
+  const segs: Array<[number, number, number, number]> = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const s0 = cuts[i]!;
+    const s1 = cuts[i + 1]!;
+    if (s1 - s0 < 1e-4) continue;
+    const mid = (s0 + s1) / 2;
+    const spans = holes
+      .filter((h) => h.s0 <= mid && h.s1 >= mid)
+      .map((h): [number, number] => [h.b, h.t])
+      .sort((p, q) => p[0] - q[0]);
+    let y = y0;
+    for (const [b, t] of spans) {
+      if (b > y) segs.push([s0, s1, y, b]);
+      y = Math.max(y, t);
+    }
+    if (y < y1) segs.push([s0, s1, y, y1]);
+  }
+  return segs;
+}
+
+/**
  * Collects level geometry: render geometry is merged per material, collision geometry is merged
  * per layer into BVHs, and walkable surfaces are recorded for footstep sounds.
  */
@@ -122,18 +162,7 @@ export class Builder {
     const alongX = Math.abs(bz - az) < 1e-6;
     const len = alongX ? Math.abs(bx - ax) : Math.abs(bz - az);
     const dir = alongX ? Math.sign(bx - ax) || 1 : Math.sign(bz - az) || 1;
-    const segs: Array<[number, number, number, number]> = []; // [s0, s1, y0, y1] along-wall
-    const sorted = [...openings].sort((p, q) => p.at - q.at);
-    let cursor = 0;
-    for (const o of sorted) {
-      const s0 = Math.max(0, o.at - o.width / 2);
-      const s1 = Math.min(len, o.at + o.width / 2);
-      if (s0 > cursor) segs.push([cursor, s0, y0, y1]);
-      if (o.bottom > y0) segs.push([s0, s1, y0, o.bottom]);
-      if (o.top < y1) segs.push([s0, s1, o.top, y1]);
-      cursor = s1;
-    }
-    if (cursor < len) segs.push([cursor, len, y0, y1]);
+    const segs = wallSegments(len, y0, y1, openings);
     const h = thickness / 2;
     for (const [s0, s1, sy0, sy1] of segs) {
       if (s1 - s0 < 1e-4 || sy1 - sy0 < 1e-4) continue;
