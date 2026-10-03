@@ -1,4 +1,4 @@
-// Usage: node scripts/preview/shot-reality.mjs "<hash>" <out.png> [steps...] where step = "teleport:x,y,z,yaw" | "wait:s" | "look:dx,dy" | "noise:x,y,z,loudness" | "use:id" | "info" | "shot"
+// Usage: node scripts/preview/shot-reality.mjs "<hash>" <out.png> [steps...] where step = "teleport:x,y,z,yaw" | "wait:s" | "look:dx,dy" | "noise:x,y,z,loudness" | "use:id" | "give:id,n" | "press:action" | "info" | "shot"
 import { chromium } from '@playwright/test';
 const [hash, out, ...steps] = process.argv.slice(2);
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
@@ -30,8 +30,16 @@ for (const s of steps) {
       [dx, dy],
     );
   } else if (k === 'noise') {
-    const [x, y, z, l] = v.split(',').map(Number);
-    await page.evaluate(([x, y, z, l]) => window.__mf42.noise(x, y, z, l), [x, y, z, l]);
+    const [x, y, z, l, kind] = v.split(',');
+    await page.evaluate(
+      ([x, y, z, l, kind]) => window.__mf42.noise(+x, +y, +z, +l, kind || 'object'),
+      [x, y, z, l, kind],
+    );
+  } else if (k === 'give') {
+    const [id, n] = v.split(',');
+    await page.evaluate(([id, n]) => window.__mf42.give(id, Number(n ?? 1)), [id, n]);
+  } else if (k === 'press') {
+    await page.evaluate((a) => window.__mf42.press(a), v);
   } else if (k === 'use') {
     console.log('use', v, await page.evaluate((id) => window.__mf42.use(id), v));
   } else if (k === 'info') {

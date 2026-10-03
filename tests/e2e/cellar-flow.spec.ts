@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 type Api = {
   ready: boolean;
+  mode: string;
   sim(s: number): void;
   use(id: string): boolean;
   teleport(x: number, y: number, z: number, yaw?: number): void;
@@ -27,6 +28,7 @@ const api = (page: Page) => ({
   noise: (x: number, y: number, z: number, l: number) =>
     page.evaluate(([x, y, z, l]) => (window as unknown as W).__mf42.noise(x!, y!, z!, l), [x, y, z, l]),
   info: () => page.evaluate(() => (window as unknown as W).__mf42.info()),
+  mode: () => page.evaluate(() => (window as unknown as W).__mf42.mode),
   inv: () => page.evaluate(() => (window as unknown as W).__mf42.inventory()),
 });
 
@@ -84,11 +86,11 @@ test('the cellar: bottles, the creature, Ežo, the valve puzzle and the way on',
   }
   expect(await until(page, async () => !!(await a.info()).flags['cellar.solved'], 30)).toBe(true);
 
-  // the water rises and the overflow pipe leads on; reality 5 isn't built yet, so the preview ends
+  // the water rises and the overflow pipe carries you on to the spa
   await a.sim(8);
   expect(await a.use('pipe')).toBe(true);
   expect(
-    await until(page, () => page.evaluate(() => !!document.querySelector('.ending-text')), 40, 0.5),
+    await until(page, async () => (await a.info()).reality === 'r5' && (await a.mode()) === 'play', 120, 0.5),
   ).toBe(true);
   expect(errors).toEqual([]);
 });

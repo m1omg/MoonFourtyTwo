@@ -20,6 +20,10 @@ export const TEXTURES: string[] = [
   'brick_wall_02',
   'metal_grate_rusty',
   'concrete_wall_004',
+  'long_white_tiles',
+  'rounded_square_tiled_wall',
+  'anti_skid_tiles',
+  'terrazzo_tiles',
 ];
 
 /** Models (public/assets/models/<id>.glb), textures capped at maxTex. */
@@ -32,6 +36,7 @@ export const MODELS: Array<{ id: string; maxTex?: number }> = [
   { id: 'wooden_stool_02' },
   { id: 'Television_01' },
   { id: 'dartboard', maxTex: 512 },
+  { id: 'wall_clock', maxTex: 512 },
   { id: 'CashRegister_01', maxTex: 512 },
   { id: 'wine_bottles_01' },
   { id: 'hanging_picture_frame_01', maxTex: 512 },
@@ -44,6 +49,7 @@ export const MODELS: Array<{ id: string; maxTex?: number }> = [
   { id: 'wooden_display_shelves_01' },
   { id: 'Barrel_01', maxTex: 512 },
   { id: 'street_lamp_01', maxTex: 512 },
+  { id: 'plastic_monobloc_chair_01', maxTex: 512 },
   { id: 'covered_car' },
   { id: 'vintage_lighter', maxTex: 512 },
   { id: 'cigarette_pack', maxTex: 512 },
@@ -55,7 +61,8 @@ export const MODELS: Array<{ id: string; maxTex?: number }> = [
 export const HDRIS: string[] = ['moonless_golf'];
 
 /** Extra furniture for the pub (added after the first layout pass). */
-export const MODELS_EXTRA: Array<{ id: string; maxTex?: number }> = [
+/** `simplify` keeps that fraction of a model's triangles (for heavy decorative meshes). */
+export const MODELS_EXTRA: Array<{ id: string; maxTex?: number; simplify?: number }> = [
   { id: 'gallinera_chair', maxTex: 512 },
   { id: 'painted_wooden_chair_02', maxTex: 512 },
   { id: 'dining_chair_02', maxTex: 512 },
@@ -71,4 +78,10 @@ export const MODELS_EXTRA: Array<{ id: string; maxTex?: number }> = [
   { id: 'wooden_crate_01', maxTex: 512 },
   { id: 'steel_frame_shelves_01', maxTex: 512 },
   { id: 'boombox', maxTex: 512 },
+  { id: 'rubber_duck_toy', maxTex: 512 },
+  { id: 'WetFloorSign_01', maxTex: 512 },
+  { id: 'lifebuoy', maxTex: 512, simplify: 0.35 },
+  { id: 'potted_plant_02', maxTex: 512, simplify: 0.15 },
+  { id: 'mounted_fluorescent_lights', maxTex: 512, simplify: 0.4 },
+  { id: 'painted_wooden_bench', maxTex: 512 },
 ];

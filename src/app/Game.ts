@@ -7,9 +7,11 @@ import {
   MeshStandardMaterial,
   PointLight,
   Scene,
+  SphereGeometry,
   Vector2,
   Vector3,
 } from 'three';
+import type { Object3D } from 'three';
 import { GameLoop, SIM_DT } from '../core/loop.ts';
 import { Rng, freshSeed } from '../core/rng.ts';
 import { Scope } from '../core/scope.ts';
@@ -417,6 +419,7 @@ export class Game {
     this.onSignal = null;
     this.player.forcedHeight = null;
     this.tweens = [];
+    for (const pr of this.projectiles) pr.mesh.removeFromParent();
     this.projectiles = [];
     this.seated = false;
     this.seatedWithDrink = false;
@@ -492,10 +495,13 @@ export class Game {
 
   /** Shows a subtitle line and waits (voice clip length or reading time). Skippable. */
   async say(who: string | null, text: string, voiceUrl?: string, minSeconds = 0): Promise<void> {
+    // A newer line takes over the subtitle and ends this one early; only the current line clears it.
+    const id = ++this.lineId;
     let seconds = Math.max(1.8, text.length / 14 + 0.7, minSeconds);
     let handle: { stop(f?: number): void } | null = null;
     if (voiceUrl && this.audio.ctx) {
       const buf = await this.audio.load(voiceUrl);
+      if (id !== this.lineId) return;
       if (buf) {
         seconds = Math.max(minSeconds, buf.duration + 0.35);
         handle = this.audio.play(buf, { bus: 'voice', reverb: 0.15 });
@@ -503,10 +509,13 @@ export class Game {
     }
     this.ui.subtitle(who, text);
     this.skipRequested = false;
-    await this.clock.until(() => this.skipRequested, seconds);
-    if (this.skipRequested) handle?.stop(0.15);
-    this.ui.subtitle(null, null);
+    await this.clock.until(() => this.skipRequested || id !== this.lineId, seconds);
+    if (this.skipRequested || id !== this.lineId) handle?.stop(0.15);
+    if (id === this.lineId) this.ui.subtitle(null, null);
   }
+
+  /** Increments with every line said (see `say`). */
+  private lineId = 0;
 
   async choose(options: string[]): Promise<number> {
     const hadLock = this.input.pointerLocked;
@@ -568,9 +577,11 @@ export class Game {
     const drunk = st.buffs.has('steady') ? 0 : clamp((bac - 0.6) / 2, 0, 1);
     const t = this.clock.time;
     const sway = drunk * (Math.sin(t * 0.9) * 0.25 + Math.sin(t * 2.3 + 1) * 0.1);
+    this.waterDepth = this.reality?.waterDepth?.(this.player.pos) ?? 0;
     const speedMul =
       (st.buffs.has('hangover') ? 0.85 : 1) *
       (st.cold.heat < 0.3 ? 0.6 + st.cold.heat : 1) *
+      (this.waterDepth > 0.6 ? 0.55 : this.waterDepth > 0.15 ? 0.78 : 1) *
       (this.seated ? 0 : 1);
     const footstep = this.player.step(dt, snap, {
       speedMul,
@@ -582,13 +593,14 @@ export class Game {
       const surf = this.builder.surfaceAt(_eye);
       if (surf) this.player.surface = surf;
     }
+    if (this.waterDepth > 0.08) this.player.surface = 'water';
     if (footstep) {
       this.addNoise({
         x: footstep.position.x,
         y: footstep.position.y,
         z: footstep.position.z,
         loudness: footstep.loudness,
-        kind: 'step',
+        kind: footstep.surface === 'water' ? 'splash' : 'step',
       });
       this.synth.footstep(footstep.surface, footstep.loudness, footstep.position);
       this.onFootstep?.(footstep);
@@ -681,23 +693,46 @@ export class Game {
     }
   }
 
-  /** Thrown bottles in flight (sim). */
-  private projectiles: Array<{ pos: Vector3; vel: Vector3; life: number }> = [];
+  /** Water depth at the player's feet (0 on dry ground), from the reality. */
+  private waterDepth = 0;
 
+  /** Thrown objects in flight (sim). */
+  private projectiles: Array<{ pos: Vector3; vel: Vector3; life: number; item: ItemId; mesh: Object3D }> = [];
+
+  /** Throws the selected throwable, or the first one in the inventory. */
   private throwBottle(): void {
-    if (!this.inventory.has('flasa')) {
+    const sel = this.inventory.slots[this.inventory.selected]?.item;
+    const item =
+      sel && ITEMS[sel].kind === 'throw'
+        ? sel
+        : this.inventory.slots.find((sl) => sl.item && ITEMS[sl.item].kind === 'throw')?.item;
+    if (!item) {
       this.ui.toast('Nemáš čo hodiť.');
       return;
     }
-    this.inventory.take('flasa');
+    this.inventory.take(item);
     const dir = this.lookDir(new Vector3());
     const p = this.player.pos
       .clone()
       .setY(this.player.pos.y + this.player.eyeHeight() - 0.1)
       .addScaledVector(dir, 0.4);
-    this.projectiles.push({ pos: p, vel: dir.multiplyScalar(11).add(new Vector3(0, 2.2, 0)), life: 4 });
+    const mesh = new Mesh(this.thrownGeo, item === 'kacka' ? this.duckMat : this.bottleMat);
+    mesh.scale.set(1, item === 'kacka' ? 1 : 2.2, 1);
+    mesh.position.copy(p);
+    this.scene?.add(mesh);
+    this.projectiles.push({
+      pos: p,
+      vel: dir.multiplyScalar(11).add(new Vector3(0, 2.2, 0)),
+      life: 4,
+      item,
+      mesh,
+    });
     this.synth.click(undefined, 500, 0.08);
   }
+
+  private readonly thrownGeo = new SphereGeometry(0.06, 8, 6);
+  private readonly bottleMat = new MeshStandardMaterial({ color: 0x2f5d2a, roughness: 0.2 });
+  private readonly duckMat = new MeshStandardMaterial({ color: 0xf2c21a, roughness: 0.5 });
 
   private stepProjectiles(dt: number): void {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -707,14 +742,29 @@ export class Game {
       const step = pr.vel.length() * dt;
       const dir = pr.vel.clone().normalize();
       const hit = this.world.raycast(pr.pos, dir, step + 0.05);
-      if (hit !== Infinity || pr.life <= 0) {
-        if (hit !== Infinity) pr.pos.addScaledVector(dir, hit);
-        this.addNoise({ x: pr.pos.x, y: pr.pos.y, z: pr.pos.z, loudness: 2.2, kind: 'throw' });
-        this.synth.shatter(pr.pos);
+      // lands in water before it hits anything solid?
+      const surf = this.reality?.waterSurface?.(pr.pos.x, pr.pos.z);
+      const inWater = surf !== undefined && surf !== null && pr.pos.y + pr.vel.y * dt <= surf;
+      if (hit !== Infinity || pr.life <= 0 || inWater) {
+        if (inWater) pr.pos.y = surf;
+        else if (hit !== Infinity) pr.pos.addScaledVector(dir, hit);
+        pr.mesh.removeFromParent();
         this.projectiles.splice(i, 1);
+        if (this.reality?.onImpact?.(pr.pos, pr.item, inWater)) continue;
+        if (inWater) {
+          this.addNoise({ x: pr.pos.x, y: pr.pos.y, z: pr.pos.z, loudness: 1.6, kind: 'splash' });
+          this.synth.splash(pr.pos, 0.8);
+        } else if (pr.item === 'kacka') {
+          this.addNoise({ x: pr.pos.x, y: pr.pos.y, z: pr.pos.z, loudness: 1.6, kind: 'throw' });
+          this.synth.squeak(pr.pos);
+        } else {
+          this.addNoise({ x: pr.pos.x, y: pr.pos.y, z: pr.pos.z, loudness: 2.2, kind: 'throw' });
+          this.synth.shatter(pr.pos);
+        }
         continue;
       }
       pr.pos.addScaledVector(pr.vel, dt);
+      pr.mesh.position.copy(pr.pos);
     }
   }
 
@@ -835,6 +885,8 @@ export class Game {
     v.glowing = this.status.buffs.has('reveal');
     v.lightOn = this.lightOn;
     v.lightPower = this.lightPower;
+    v.inWater = this.waterDepth > 0.08;
+    v.waterDepth = this.waterDepth;
     v.dead = this.mode !== 'play';
   }
 

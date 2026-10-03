@@ -33,7 +33,8 @@ export type ItemId =
   | 'chlieb'
   | 'utopenec'
   | 'pagac'
-  | 'flasa';
+  | 'flasa'
+  | 'kacka';
 
 export interface ItemDef {
   id: ItemId;
@@ -236,6 +237,18 @@ export const ITEMS: Record<ItemId, ItemDef> = {
       { type: 'buff', buff: 'courage', seconds: 60, strength: 0.3 },
     ],
     color: 0xb06a4a,
+    glass: 'plate',
+  },
+  kacka: {
+    id: 'kacka',
+    name: 'Gumená kačička',
+    tag: 'hodiť (G) — zapiští, vo vode čľapne',
+    kind: 'throw',
+    ml: 0,
+    abv: 0,
+    absorbSec: 1,
+    effects: [],
+    color: 0xf2c21a,
     glass: 'plate',
   },
   flasa: {

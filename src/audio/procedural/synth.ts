@@ -218,6 +218,105 @@ export class Synth {
     }
   }
 
+  /** Rubber duck squeak: a short rising, nasal chirp. */
+  squeak(pos?: Vector3, strength = 1): void {
+    const o = this.out('sfx', pos, 1.5);
+    if (!o) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(900, t);
+    osc.frequency.exponentialRampToValueAtTime(1900, t + 0.09);
+    osc.frequency.exponentialRampToValueAtTime(1200, t + 0.22);
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1600;
+    bp.Q.value = 3;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.25 * strength, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.26);
+    osc.connect(bp).connect(g).connect(node);
+    osc.start(t);
+    osc.stop(t + 0.3);
+  }
+
+  /** Splash: something hitting water (strength ~0.3 wading .. 1 a thrown object). */
+  splash(pos?: Vector3, strength = 1): void {
+    const o = this.out('sfx', pos, 2);
+    const nb = this.noiseBuf('white');
+    if (!o || !nb) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = nb;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(1800, t);
+    bp.frequency.exponentialRampToValueAtTime(500, t + 0.35);
+    bp.Q.value = 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.4 * strength, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25 + 0.3 * strength);
+    src.connect(bp).connect(g).connect(node);
+    src.start(t, this.rng.next() * 3, 0.7);
+    // a couple of droplets
+    for (let i = 0; i < 3; i++) this.drip(pos, 0.25 * strength, 0.08 + this.rng.next() * 0.35);
+  }
+
+  /** A single water drop (plink), optionally delayed. */
+  drip(pos?: Vector3, volume = 0.12, delay = 0): void {
+    const o = this.out('ambience', pos, 1.2);
+    if (!o) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    const f = 900 + this.rng.next() * 900;
+    osc.frequency.setValueAtTime(f, t);
+    osc.frequency.exponentialRampToValueAtTime(f * 2.2, t + 0.05);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(volume, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    osc.connect(g).connect(node);
+    osc.start(t);
+    osc.stop(t + 0.15);
+  }
+
+  /** Lifeguard whistle; `under` muffles it as if heard through water. */
+  whistle(pos?: Vector3, under = false, volume = 0.3): void {
+    const o = this.out('sfx', pos, 3);
+    if (!o) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = 2900;
+    // the pea's trill
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 38;
+    const lg = ctx.createGain();
+    lg.gain.value = 140;
+    lfo.connect(lg).connect(osc.frequency);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = under ? 420 : 6000;
+    lp.Q.value = under ? 6 : 0.7;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(volume * (under ? 1.6 : 0.5), t + 0.03);
+    g.gain.setValueAtTime(volume * (under ? 1.6 : 0.5), t + 0.55);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.75);
+    osc.connect(lp).connect(g).connect(node);
+    osc.start(t);
+    lfo.start(t);
+    osc.stop(t + 0.8);
+    lfo.stop(t + 0.8);
+  }
+
   /** Liquid pouring / gulping. */
   pour(seconds: number, pos?: Vector3, gulp = false): void {
     const o = this.out('sfx', pos, 1);

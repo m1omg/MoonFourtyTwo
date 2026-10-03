@@ -1,4 +1,5 @@
 import type { Scene, Vector3 } from 'three';
+import type { ItemId } from '../sim/items/items.data.ts';
 import type { Game } from '../app/Game.ts';
 import type { Scope } from '../core/scope.ts';
 import type { Builder } from './kit/Builder.ts';
@@ -39,6 +40,12 @@ export interface RealityInstance {
   warmth?(): number;
   /** Threat 0..1 for the fear model (defaults to the nearest entity heuristic). */
   threat?(): number;
+  /** Depth of water at the player's feet (wading slows you and footsteps splash). */
+  waterDepth?(pos: Vector3): number;
+  /** Water surface height at (x, z), or null where there is no water (thrown objects splash). */
+  waterSurface?(x: number, z: number): number | null;
+  /** A thrown item landed; return true to replace the default sound and noise. */
+  onImpact?(pos: Vector3, item: ItemId, inWater: boolean): boolean;
   dispose?(): void;
 }
 

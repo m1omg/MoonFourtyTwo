@@ -37,7 +37,7 @@ import { LightPool, type Fixture } from '../../world/lightPool.ts';
 import { loadVoiceIndex, voiceUrl, type Lines } from '../../narrative/voice.ts';
 import { MusicBox, TUNES } from '../../audio/procedural/musicbox.ts';
 import { Cancelled } from '../../sim/narrative/ScriptRunner.ts';
-import { clamp } from '../../core/damp.ts';
+import { clamp, damp } from '../../core/damp.ts';
 
 const E = 'Ežo';
 export const L4: Lines = {
@@ -761,7 +761,8 @@ const reality: RealityModule = {
         },
       });
     });
-    wheels.forEach((w, i) => {
+    const spin = wheels.map(() => 0);
+    wheels.forEach((_w, i) => {
       const pos = new Vector3(3.38, F + 1.3, -44.3 - i * 1.2);
       I.add({
         id: `valve${i}`,
@@ -773,10 +774,8 @@ const reality: RealityModule = {
           void solo(async () => {
             game.synth.clank(pos, 0.6);
             game.addNoise({ x: pos.x, y: pos.y, z: pos.z, loudness: 1.3, kind: 'object' });
-            for (let k = 0; k < 20; k++) {
-              w.rotation.z -= 0.16;
-              await game.clock.wait(0.05);
-            }
+            spin[i] = spin[i]! + 3.2; // the wheel turns in frame(), on render time
+            await game.clock.wait(1);
             st.valveSeq.push(i);
             if (!st.valveSeq.every((v, k) => v === VALVE_ORDER[k])) {
               st.valveSeq = [];
@@ -965,6 +964,7 @@ const reality: RealityModule = {
       },
       frame(dt, alpha, t) {
         pool.update(game.renderer.camera.position, t);
+        wheels.forEach((w, i) => (w.rotation.z = damp(w.rotation.z, -spin[i]!, 4, dt)));
         fire.intensity = 8 + 2 * Math.sin(t * 9) * Math.sin(t * 4.3);
         fireDoorMat.color.setRGB(1, 0.42 + 0.08 * Math.sin(t * 7), 0.12);
         steamSprites.forEach((sp, i) => {

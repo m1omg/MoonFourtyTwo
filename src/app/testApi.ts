@@ -1,3 +1,5 @@
+import type { NoiseEvent } from '../sim/ai/types.ts';
+import type { ItemId } from '../sim/items/items.data.ts';
 import type { Game } from './Game.ts';
 import type { Action } from '../input/actions.ts';
 
@@ -77,9 +79,15 @@ export function installTestApi(game: Game): void {
     subtitle(): string {
       return document.querySelector('.subtitles')?.textContent ?? '';
     },
+    /** Puts items into the inventory and selects the slot holding them. */
+    give(id: ItemId, n = 1): void {
+      game.inventory.add(id, n);
+      const i = game.inventory.slots.findIndex((sl) => sl.item === id);
+      if (i >= 0) game.inventory.select(i);
+    },
     /** Emits a noise event (creatures that hunt by sound react to it). */
-    noise(x: number, y: number, z: number, loudness = 1): void {
-      game.addNoise({ x, y, z, loudness, kind: 'object' });
+    noise(x: number, y: number, z: number, loudness = 1, kind: NoiseEvent['kind'] = 'object'): void {
+      game.addNoise({ x, y, z, loudness, kind });
     },
     goto(id: string, cp?: string): Promise<void> {
       return game.startReality(id, cp, true);

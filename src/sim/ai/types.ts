@@ -45,7 +45,7 @@ export interface NoiseEvent {
   z: number;
   /** ~0.2 (crouch step) .. 1 (sprint) .. 2 (thrown bottle, scream). */
   loudness: number;
-  kind: 'step' | 'throw' | 'panic' | 'object' | 'door';
+  kind: 'step' | 'splash' | 'throw' | 'panic' | 'object' | 'door';
 }
 
 export interface AIContext {

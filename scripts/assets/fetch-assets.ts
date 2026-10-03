@@ -8,7 +8,8 @@ import crypto from 'node:crypto';
 import sharp from 'sharp';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, prune, weld, quantize, textureCompress, resample } from '@gltf-transform/functions';
+import { dedup, prune, weld, quantize, textureCompress, resample, simplify } from '@gltf-transform/functions';
+import { MeshoptSimplifier } from 'meshoptimizer';
 import { TEXTURES, MODELS, MODELS_EXTRA, HDRIS } from '../../assets-src/sources.ts';
 
 const UA = 'MoonFourtyTwo-pipeline/1.0 (+https://github.com/m1omg/MoonFourtyTwo)';
@@ -94,7 +95,7 @@ async function fetchTexture(id: string): Promise<void> {
   console.log(`tex ${id}`);
 }
 
-async function fetchModel(m: { id: string; maxTex?: number }): Promise<void> {
+async function fetchModel(m: { id: string; maxTex?: number; simplify?: number }): Promise<void> {
   const files = await json<Record<string, Record<string, Record<string, PhFile>>>>(
     `https://api.polyhaven.com/files/${m.id}`,
   );
@@ -108,6 +109,11 @@ async function fetchModel(m: { id: string; maxTex?: number }): Promise<void> {
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
   const doc = await io.read(gltfPath);
   const max = m.maxTex ?? 1024;
+  if (m.simplify) {
+    // heavy decorative meshes (plants): keep a fraction of the triangles
+    await MeshoptSimplifier.ready;
+    await doc.transform(weld(), simplify({ simplifier: MeshoptSimplifier, ratio: m.simplify, error: 0.01 }));
+  }
   await doc.transform(
     dedup(),
     prune(),
