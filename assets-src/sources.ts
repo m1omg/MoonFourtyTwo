@@ -96,4 +96,14 @@ export const MODELS_EXTRA: Array<{ id: string; maxTex?: number; simplify?: numbe
   { id: 'vintage_cabinet_01', maxTex: 512, simplify: 0.3 },
   { id: 'painted_wooden_cabinet', maxTex: 512 },
   { id: 'vintage_electric_kettle', maxTex: 256, simplify: 0.3 },
+  // reality 7: the mountain hotel
+  { id: 'mid_century_lounge_chair', maxTex: 512, simplify: 0.4 },
+  { id: 'sofa_03', maxTex: 512, simplify: 0.4 },
+  { id: 'Chandelier_02', maxTex: 512, simplify: 0.4 },
+  { id: 'old_bed_frame', maxTex: 512, simplify: 0.12 },
+  { id: 'vintage_oil_lamp', maxTex: 512, simplify: 0.5 },
+  { id: 'ornate_mirror_01', maxTex: 512, simplify: 0.5 },
+  { id: 'portable_cassette_player', maxTex: 256, simplify: 0.5 },
+  { id: 'painted_wooden_nightstand', maxTex: 512 },
+  { id: 'vintage_grandfather_clock_01', maxTex: 512, simplify: 0.5 },
 ];

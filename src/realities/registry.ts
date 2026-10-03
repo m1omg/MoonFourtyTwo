@@ -8,6 +8,7 @@ export const REALITIES: Record<string, () => Promise<{ default: RealityModule }>
   r4: () => import('./r04_cellar/index.ts'),
   r5: () => import('./r05_spa/index.ts'),
   r6: () => import('./r06_block/index.ts'),
+  r7: () => import('./r07_hotel/index.ts'),
 };
 
 export const REALITY_ORDER = ['r1'];

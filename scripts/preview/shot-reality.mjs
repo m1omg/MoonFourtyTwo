@@ -14,7 +14,8 @@ await page.evaluate(() => window.__mf42.sim(1.5));
 console.log('sim 1.5s took', Date.now() - t0, 'ms');
 let shot = 0;
 for (const s of steps) {
-  const [k, v] = s.split(':');
+  const [k, ...rest] = s.split(':');
+  const v = rest.join(':');
   if (k === 'teleport') {
     const [x, y, z, yaw] = v.split(',').map(Number);
     await page.evaluate(([x, y, z, yaw]) => window.__mf42.teleport(x, y, z, yaw), [x, y, z, yaw]);

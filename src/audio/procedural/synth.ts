@@ -486,6 +486,33 @@ export class Synth {
     am.stop(t + seconds + 0.06);
   }
 
+  /** A dry cart wheel squealing once (a housekeeping trolley). */
+  wheel(pos?: Vector3, strength = 1): void {
+    const o = this.out('sfx', pos, 1.5);
+    if (!o) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    const f = 1500 + this.rng.next() * 500;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(f, t);
+    osc.frequency.linearRampToValueAtTime(f * (0.85 + this.rng.next() * 0.1), t + 0.16);
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 31;
+    const vg = ctx.createGain();
+    vg.gain.value = 40;
+    vib.connect(vg).connect(osc.frequency);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05 * strength, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    osc.connect(g).connect(node);
+    osc.start(t);
+    vib.start(t);
+    osc.stop(t + 0.22);
+    vib.stop(t + 0.22);
+  }
+
   /** Sudden dissonant stinger for scares. */
   stinger(strength = 1): void {
     const o = this.out('sfx');

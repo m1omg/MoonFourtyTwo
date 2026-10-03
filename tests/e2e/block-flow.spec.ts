@@ -118,13 +118,20 @@ test("the housing estate: the bathtub, the intercom, the caretaker's key and the
   await a.sim(0.3);
   expect(await a.subtitle()).toContain('Gombíky');
 
-  // drunk, the panel has more buttons; the last one leads on (reality 7 isn't built yet)
+  // drunk, the panel has more buttons; the last one leads on, to the hotel
   await a.setBac(1.6);
   expect(await a.use('panel')).toBe(true);
   expect(await until(page, a.choosing, 20, 0.5)).toBe(true);
   expect(await a.pick(3)).toBe(true);
   expect(
-    await until(page, () => page.evaluate(() => !!document.querySelector('.ending-text')), 40, 0.25),
+    await until(
+      page,
+      async () =>
+        (await a.info()).reality === 'r7' &&
+        (await page.evaluate(() => (window as unknown as W).__mf42.mode)) === 'play',
+      60,
+      0.5,
+    ),
   ).toBe(true);
   expect(errors).toEqual([]);
 });
