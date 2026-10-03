@@ -324,9 +324,15 @@ const reality: RealityModule = {
       ezo.attach('RightHand', tw.mug(0.5), [0.02, -0.07, 0.06], [0, 0, Math.PI / 2]);
     }
     props.place('WoodenTable_03', { pos: [ezoCell.x, 0, ezoCell.z], rotY: Math.PI / 2 });
+    // chair rotY 0 faces +z: Ežo sits on the -z side facing the table, the player across from him
+    props.place('painted_wooden_chair_02', {
+      pos: [ezoCell.x, 0, ezoCell.z - 0.78],
+      rotY: 0,
+      collide: 'none',
+    });
     props.place('painted_wooden_chair_02', {
       pos: [ezoCell.x, 0, ezoCell.z + 0.78],
-      rotY: 0,
+      rotY: Math.PI,
       collide: 'none',
     });
     nav.fillRect(ezoCell.x - 0.6, ezoCell.z - 1.0, ezoCell.x + 0.6, ezoCell.z + 0.6, 0, true);
@@ -501,15 +507,16 @@ const reality: RealityModule = {
         },
       });
     }
+    const atEzosTable = () => st.seated && game.player.pos.distanceTo(playerSeat) < 0.5;
     game.interactions.add({
       id: 'ezo',
       pos: new Vector3(ezoCell.x, 1.15, ezoCell.z - 0.75),
       radius: 0.45,
       range: 3,
-      prompt: 'Prisadnúť si k Ežovi',
+      prompt: () => (atEzosTable() ? 'Hovoriť s Ežom' : 'Prisadnúť si k Ežovi'),
       enabled: () => !st.busy,
       onUse: () => {
-        sitAt(playerSeat, Math.PI, true);
+        if (!atEzosTable()) sitAt(playerSeat, 0, true);
         void meetEzo();
       },
     });
@@ -576,7 +583,7 @@ const reality: RealityModule = {
       defaultCheckpoint: 'start',
       checkpoints: {
         start: { pos: new Vector3(startCell.x, 0, startCell.z + 1.5), yaw: 0 },
-        ezo: { pos: playerSeat.clone(), yaw: Math.PI },
+        ezo: { pos: playerSeat.clone(), yaw: 0 },
       },
       start(cp) {
         if (game.flags.has('hall.ezo')) game.giveLight(1);
@@ -598,7 +605,7 @@ const reality: RealityModule = {
           0.9,
         );
         if (cp === 'ezo') {
-          sitAt(playerSeat, Math.PI, true);
+          sitAt(playerSeat, 0, true);
           return;
         }
         void solo(async () => {

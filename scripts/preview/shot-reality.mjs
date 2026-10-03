@@ -1,4 +1,4 @@
-// Usage: node scripts/preview/shot-reality.mjs "<hash>" <out.png> [steps...] where step = "teleport:x,y,z,yaw" | "wait:s" | "look:dx,dy"
+// Usage: node scripts/preview/shot-reality.mjs "<hash>" <out.png> [steps...] where step = "teleport:x,y,z,yaw" | "wait:s" | "look:dx,dy" | "noise:x,y,z,loudness" | "use:id" | "info" | "shot"
 import { chromium } from '@playwright/test';
 const [hash, out, ...steps] = process.argv.slice(2);
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
@@ -29,6 +29,14 @@ for (const s of steps) {
       },
       [dx, dy],
     );
+  } else if (k === 'noise') {
+    const [x, y, z, l] = v.split(',').map(Number);
+    await page.evaluate(([x, y, z, l]) => window.__mf42.noise(x, y, z, l), [x, y, z, l]);
+  } else if (k === 'use') {
+    console.log('use', v, await page.evaluate((id) => window.__mf42.use(id), v));
+  } else if (k === 'info') {
+    const i = await page.evaluate(() => ({ ...window.__mf42.info(), sub: window.__mf42.subtitle() }));
+    console.log(JSON.stringify({ pos: i.pos, entities: i.entities, flags: i.flags, sub: i.sub }));
   } else if (k === 'shot') {
     await page.screenshot({ path: out.replace('.png', `_${shot++}.png`), timeout: 180000 });
   }

@@ -15,13 +15,18 @@ Budgets agreed with the owner: **Higgsfield ≤ 35 credits** (balance must stay 
 
 Remaining Higgsfield allowance: **2.5 credits**.
 
+2026-10-03: checked Higgsfield speech pricing for Ežo's lines (0.15 credits per started 50 characters). Brian isn't a Higgsfield voice; a test submission with his ElevenLabs id was rejected ("Voice not found") at no charge. The owner chose not to use Higgsfield for voices. Balance unchanged at 37.5.
+
 ## Krea
 
-Krea's MCP doesn't report what a job costs. Until the owner reports the balance, costs are estimated from Krea's public API price list (USD).
+Krea's MCP doesn't report what a job costs.
 
-| #   | Date       | Model                | Purpose                       | Est. cost |
-| --- | ---------- | -------------------- | ----------------------------- | --------- |
-| 1   | 2026-10-02 | krea-2/large image   | Jano concept (seated regular) | ~$0.06    |
-| 2   | 2026-10-02 | tripo/h3.1 image→3D  | Jano mesh                     | unknown   |
-| 3   | 2026-10-02 | krea-2/large image   | Fero concept                  | ~$0.06    |
-| 4   | 2026-10-02 | tripo/h3.1 image→3D  | Fero mesh                     | unknown   |
+| #   | Date       | Model                      | Purpose                                   | Cost    |
+| --- | ---------- | -------------------------- | ----------------------------------------- | ------- |
+| 1   | 2026-10-02 | krea-2/large image         | Jano concept (seated regular)             | unknown |
+| 2   | 2026-10-02 | tripo/h3.1 image→3D        | Jano mesh                                 | unknown |
+| 3   | 2026-10-02 | krea-2/large image         | Fero concept                              | unknown |
+| 4   | 2026-10-02 | tripo/h3.1 image→3D        | Fero mesh                                 | unknown |
+| 5–7 | 2026-10-02 | elevenlabs/tts (eleven_v4) | Ežo voice auditions A/B/C (one line each) | unknown |
+
+After these 7 jobs the owner reported a Krea balance of **0**, far past the agreed limit of 1000. Krea is no longer used for this project. In the game, only audition B (Brian, the owner's pick) is used: it is cut into two lines, `e_intro2` and `e_intro3`. All other lines are subtitles only.

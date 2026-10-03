@@ -6,6 +6,7 @@ declare global {
       ready: boolean;
       mode: string;
       step(seconds: number, hz?: number): void;
+      sim(seconds: number): void;
       frames(n: number, hz: number): void;
       move(x: number, y: number, sprint?: boolean): void;
       look(dx: number, dy: number): void;
@@ -17,6 +18,8 @@ declare global {
 }
 
 const REALITIES = (process.env.REALITIES ?? 'r0').split(',');
+/** Checkpoints where the player can walk right away (the pub opens seated, covered by pub-flow). */
+const START: Record<string, string> = { r1: 'r1:frozen' };
 
 for (const id of REALITIES) {
   test(`reality ${id} loads and renders`, async ({ page }, info) => {
@@ -26,18 +29,23 @@ for (const id of REALITIES) {
     page.on('console', (m) => {
       if (m.type() === 'error') errors.push(m.text());
     });
-    await page.goto(`./#${id}&test&q=low&seed=7`);
+    await page.goto(`./#${START[id] ?? id}&test&q=low&seed=7`);
     await page.waitForFunction(() => window.__mf42?.ready === true, null, { timeout: 120_000 });
-    await page.evaluate(() => window.__mf42.step(3));
+    // simulate without rendering every frame (software GL is slow), then render a few frames
+    await page.evaluate(() => {
+      window.__mf42.sim(3);
+      window.__mf42.frames(12, 60);
+    });
     const before = (await page.evaluate(() => window.__mf42.info())) as {
       pos: number[];
       render: { calls: number };
     };
     await page.evaluate(() => {
       window.__mf42.move(0, 1);
-      window.__mf42.step(1.5);
+      window.__mf42.sim(1.5);
       window.__mf42.move(0, 0);
-      window.__mf42.step(0.5);
+      window.__mf42.sim(0.5);
+      window.__mf42.frames(6, 60);
     });
     const after = (await page.evaluate(() => window.__mf42.info())) as {
       pos: number[];

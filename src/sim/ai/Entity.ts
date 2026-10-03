@@ -76,29 +76,38 @@ export abstract class Entity {
         this.repath = 0.6;
         this.lastTarget.copy(target);
       }
-      if (this.path && this.path.length > 1) {
+      if (this.path === null) {
+        // unreachable: stay put
+        this.anim.move = 0;
+        return dist;
+      }
+      // A target outside our area (an off-limits room) only draws us to the nearest edge,
+      // never through the doorway.
+      const [tcx, tcz] = ctx.nav.toCell(target.x, target.z);
+      const inArea = (ctx.nav.get(tcx, tcz) & this.navMask) !== 0;
+      const end = this.path[this.path.length - 1]!;
+      if (this.path.length > 1) {
         while (this.pathIdx < this.path.length - 1) {
           const wp = this.path[this.pathIdx]!;
           if (Math.hypot(wp[0] - this.pos.x, wp[1] - this.pos.z) < 0.35) this.pathIdx++;
           else break;
         }
         const wp = this.path[Math.min(this.pathIdx, this.path.length - 1)]!;
-        if (this.pathIdx >= this.path.length - 1) {
-          wx = target.x;
-          wz = target.z;
-        } else {
-          wx = wp[0];
-          wz = wp[1];
-        }
-      } else if (this.path === null) {
-        // unreachable: stay put
-        this.anim.move = 0;
-        return dist;
+        const last = this.pathIdx >= this.path.length - 1;
+        wx = last ? (inArea ? target.x : end[0]) : wp[0];
+        wz = last ? (inArea ? target.z : end[1]) : wp[1];
+      } else if (!inArea) {
+        wx = end[0];
+        wz = end[1];
       }
     }
     const sx = wx - this.pos.x;
     const sz = wz - this.pos.z;
-    const sl = Math.hypot(sx, sz) || 1;
+    const sl = Math.hypot(sx, sz);
+    if (sl < 1e-3) {
+      this.anim.move = 0;
+      return dist;
+    }
     const step = Math.min(speed * dt, sl);
     this.pos.x += (sx / sl) * step;
     this.pos.z += (sz / sl) * step;

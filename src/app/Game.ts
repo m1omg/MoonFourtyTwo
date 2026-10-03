@@ -392,6 +392,13 @@ export class Game {
   async gotoReality(id: string, checkpoint?: string): Promise<void> {
     this.input.setEnabled(false);
     await this.tweenFx('fade', 1, 1.2);
+    if (!realityExists(id)) {
+      // The next reality isn't built yet: end the preview instead of falling back to the pub.
+      this.disposeReality();
+      await this.ui.showEndingText([t('toBeContinued'), t('thanksForPlaying')], 3500);
+      await this.titleScreen();
+      return;
+    }
     await this.startReality(id, checkpoint, false);
   }
 
@@ -410,6 +417,7 @@ export class Game {
     this.onSignal = null;
     this.player.forcedHeight = null;
     this.tweens = [];
+    this.projectiles = [];
     this.seated = false;
     this.seatedWithDrink = false;
     this.hiddenIn = null;
@@ -590,6 +598,7 @@ export class Game {
       this.addNoise({ x: p.x, y: p.y + 1.5, z: p.z, loudness: 0.5, kind: 'panic' });
     }
 
+    this.stepProjectiles(dt);
     // drinking animation timer
     if (this.drinkTimer > 0) {
       this.drinkTimer -= dt;
@@ -651,6 +660,9 @@ export class Game {
         case 'drink':
           this.startDrink();
           break;
+        case 'throw':
+          this.throwBottle();
+          break;
         case 'light':
           if (this.hasLight) {
             this.lightOn = !this.lightOn;
@@ -669,11 +681,52 @@ export class Game {
     }
   }
 
+  /** Thrown bottles in flight (sim). */
+  private projectiles: Array<{ pos: Vector3; vel: Vector3; life: number }> = [];
+
+  private throwBottle(): void {
+    if (!this.inventory.has('flasa')) {
+      this.ui.toast('Nemáš čo hodiť.');
+      return;
+    }
+    this.inventory.take('flasa');
+    const dir = this.lookDir(new Vector3());
+    const p = this.player.pos
+      .clone()
+      .setY(this.player.pos.y + this.player.eyeHeight() - 0.1)
+      .addScaledVector(dir, 0.4);
+    this.projectiles.push({ pos: p, vel: dir.multiplyScalar(11).add(new Vector3(0, 2.2, 0)), life: 4 });
+    this.synth.click(undefined, 500, 0.08);
+  }
+
+  private stepProjectiles(dt: number): void {
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const pr = this.projectiles[i]!;
+      pr.life -= dt;
+      pr.vel.y -= 18 * dt;
+      const step = pr.vel.length() * dt;
+      const dir = pr.vel.clone().normalize();
+      const hit = this.world.raycast(pr.pos, dir, step + 0.05);
+      if (hit !== Infinity || pr.life <= 0) {
+        if (hit !== Infinity) pr.pos.addScaledVector(dir, hit);
+        this.addNoise({ x: pr.pos.x, y: pr.pos.y, z: pr.pos.z, loudness: 2.2, kind: 'throw' });
+        this.synth.shatter(pr.pos);
+        this.projectiles.splice(i, 1);
+        continue;
+      }
+      pr.pos.addScaledVector(pr.vel, dt);
+    }
+  }
+
   private startDrink(): void {
     if (this.drinkTimer > 0) return;
     const slot = this.inventory.slots[this.inventory.selected]!;
     if (!slot.item) {
       this.ui.toast(t('hotbarEmpty'));
+      return;
+    }
+    if (ITEMS[slot.item].kind === 'throw') {
+      this.throwBottle();
       return;
     }
     const item = this.inventory.takeSelected()!;

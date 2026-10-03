@@ -32,14 +32,15 @@ export type ItemId =
   | 'voda'
   | 'chlieb'
   | 'utopenec'
-  | 'pagac';
+  | 'pagac'
+  | 'flasa';
 
 export interface ItemDef {
   id: ItemId;
   name: string;
   /** Short tag shown in the hotbar tooltip. */
   tag: string;
-  kind: 'drink' | 'food';
+  kind: 'drink' | 'food' | 'throw';
   /** Serving size in ml (0 for food). */
   ml: number;
   /** Alcohol by volume, 0..1. */
@@ -236,6 +237,18 @@ export const ITEMS: Record<ItemId, ItemDef> = {
     ],
     color: 0xb06a4a,
     glass: 'plate',
+  },
+  flasa: {
+    id: 'flasa',
+    name: 'Prázdna fľaša',
+    tag: 'hodiť (G) — odlákať pozornosť',
+    kind: 'throw',
+    ml: 0,
+    abv: 0,
+    absorbSec: 1,
+    effects: [],
+    color: 0x2f5d2a,
+    glass: 'bottle',
   },
   pagac: {
     id: 'pagac',

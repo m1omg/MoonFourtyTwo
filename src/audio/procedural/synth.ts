@@ -139,6 +139,85 @@ export class Synth {
     }
   }
 
+  /** Glass bottle shattering (bright noise burst + tinkles). */
+  shatter(pos?: Vector3): void {
+    const o = this.out('sfx', pos, 2);
+    const nb = this.noiseBuf('white');
+    if (!o || !nb) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = nb;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2500;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    src.connect(hp).connect(g).connect(node);
+    src.start(t, this.rng.next() * 3, 0.4);
+    for (let i = 0; i < 7; i++) {
+      const osc = ctx.createOscillator();
+      osc.frequency.value = 3000 + this.rng.next() * 4000;
+      const og = ctx.createGain();
+      const st = t + 0.03 + this.rng.next() * 0.35;
+      og.gain.setValueAtTime(0.0001, st);
+      og.gain.exponentialRampToValueAtTime(0.08, st + 0.003);
+      og.gain.exponentialRampToValueAtTime(0.0001, st + 0.15);
+      osc.connect(og).connect(node);
+      osc.start(st);
+      osc.stop(st + 0.2);
+    }
+  }
+
+  /** Hiss (steam, the creature). */
+  hiss(pos: Vector3 | undefined, seconds: number, volume = 0.25): void {
+    const o = this.out('sfx', pos, 1.5);
+    const nb = this.noiseBuf('white');
+    if (!o || !nb) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    src.buffer = nb;
+    src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'highpass';
+    bp.frequency.value = 3200;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(volume, t + 0.08);
+    g.gain.setValueAtTime(volume, t + seconds * 0.7);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    src.connect(bp).connect(g).connect(node);
+    src.start(t, this.rng.next() * 3);
+    src.stop(t + seconds + 0.05);
+  }
+
+  /** Metallic clank (valves, pipes). */
+  clank(pos?: Vector3, strength = 1): void {
+    const o = this.out('sfx', pos, 2);
+    if (!o) return;
+    const { ctx, node } = o;
+    const t = ctx.currentTime;
+    for (const [f, a, d] of [
+      [180, 0.4, 0.9],
+      [427, 0.25, 0.6],
+      [913, 0.12, 0.4],
+      [1621, 0.06, 0.25],
+    ] as const) {
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = f * (0.95 + this.rng.next() * 0.1);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(a * strength, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      osc.connect(g).connect(node);
+      osc.start(t);
+      osc.stop(t + d + 0.05);
+    }
+  }
+
   /** Liquid pouring / gulping. */
   pour(seconds: number, pos?: Vector3, gulp = false): void {
     const o = this.out('sfx', pos, 1);

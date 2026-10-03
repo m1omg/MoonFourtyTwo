@@ -17,6 +17,9 @@ export const TEXTURES: string[] = [
   'concrete_floor_worn_001',
   'grey_tiles',
   'rusty_metal_02',
+  'brick_wall_02',
+  'metal_grate_rusty',
+  'concrete_wall_004',
 ];
 
 /** Models (public/assets/models/<id>.glb), textures capped at maxTex. */
@@ -29,7 +32,6 @@ export const MODELS: Array<{ id: string; maxTex?: number }> = [
   { id: 'wooden_stool_02' },
   { id: 'Television_01' },
   { id: 'dartboard', maxTex: 512 },
-  { id: 'wall_clock', maxTex: 512 },
   { id: 'CashRegister_01', maxTex: 512 },
   { id: 'wine_bottles_01' },
   { id: 'hanging_picture_frame_01', maxTex: 512 },
@@ -42,7 +44,6 @@ export const MODELS: Array<{ id: string; maxTex?: number }> = [
   { id: 'wooden_display_shelves_01' },
   { id: 'Barrel_01', maxTex: 512 },
   { id: 'street_lamp_01', maxTex: 512 },
-  { id: 'plastic_monobloc_chair_01', maxTex: 512 },
   { id: 'covered_car' },
   { id: 'vintage_lighter', maxTex: 512 },
   { id: 'cigarette_pack', maxTex: 512 },
@@ -60,4 +61,14 @@ export const MODELS_EXTRA: Array<{ id: string; maxTex?: number }> = [
   { id: 'dining_chair_02', maxTex: 512 },
   { id: 'gallinera_table', maxTex: 1024 },
   { id: 'wooden_stool_01', maxTex: 512 },
+  { id: 'wooden_barrels_01' },
+  { id: 'wine_barrel_01', maxTex: 512 },
+  { id: 'caged_hanging_light', maxTex: 512 },
+  { id: 'industrial_caged_sconce', maxTex: 512 },
+  { id: 'metal_office_desk', maxTex: 512 },
+  { id: 'rusted_spade_01', maxTex: 512 },
+  { id: 'propane_tank', maxTex: 512 },
+  { id: 'wooden_crate_01', maxTex: 512 },
+  { id: 'steel_frame_shelves_01', maxTex: 512 },
+  { id: 'boombox', maxTex: 512 },
 ];

@@ -86,6 +86,8 @@ export const sk = {
   updated: 'Hra bola aktualizovaná. Načítavam znova…',
   webglFail: 'Tvoj prehliadač nepodporuje WebGL 2. Skús aktuálny Chrome, Firefox alebo Safari.',
   saved: 'Uložené',
+  toBeContinued: 'Pokračovanie nabudúce.',
+  thanksForPlaying: 'Ďakujem, že si si dal ešte jedno.',
 } as const;
 
 export type StringKey = keyof typeof sk;

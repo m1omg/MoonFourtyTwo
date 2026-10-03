@@ -77,6 +77,10 @@ export function installTestApi(game: Game): void {
     subtitle(): string {
       return document.querySelector('.subtitles')?.textContent ?? '';
     },
+    /** Emits a noise event (creatures that hunt by sound react to it). */
+    noise(x: number, y: number, z: number, loudness = 1): void {
+      game.addNoise({ x, y, z, loudness, kind: 'object' });
+    },
     goto(id: string, cp?: string): Promise<void> {
       return game.startReality(id, cp, true);
     },
