@@ -87,6 +87,8 @@ export class Props {
     const g = this.gltfs.get(id);
     if (!g) return null;
     const obj = g.scene.clone(true);
+    // realities can find their props again (to move, burn or hide them)
+    obj.userData.prop = id;
     obj.position.set(...o.pos);
     obj.rotation.set(o.rotX ?? 0, o.rotY ?? 0, o.rotZ ?? 0);
     if (o.scale) obj.scale.setScalar(o.scale);

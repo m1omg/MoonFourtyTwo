@@ -77,9 +77,9 @@ test('the silent sea: three eons of Čierne, the path of light and the window', 
   await a.sim(1);
   expect((await a.info()).pos[1]!).toBeGreaterThan(-0.3);
   await a.teleport(0, 0.2, -222, 0);
-  // reality 11 isn't built yet, so the preview ends
+  // into the window: the last round
   expect(
-    await until(page, () => page.evaluate(() => !!document.querySelector('.ending-text')), 30, 0.5),
+    await until(page, async () => (await a.mode()) === 'play' && (await a.info()).reality === 'r11', 60, 0.5),
   ).toBe(true);
   expect(errors).toEqual([]);
 });

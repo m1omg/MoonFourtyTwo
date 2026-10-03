@@ -19,7 +19,7 @@ declare global {
 
 const REALITIES = (process.env.REALITIES ?? 'r0').split(',');
 /** Checkpoints where the player can walk right away (the pub opens seated, covered by pub-flow). */
-const START: Record<string, string> = { r1: 'r1:frozen' };
+const START: Record<string, string> = { r1: 'r1:frozen', r12: 'r12:square' };
 
 // a small viewport keeps software rendering on shared CI runners within the time limit
 test.use({ viewport: { width: 640, height: 360 } });

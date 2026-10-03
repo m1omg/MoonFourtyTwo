@@ -4,6 +4,7 @@ import type { RealityModule, RealityInstance } from '../../world/Reality.ts';
 import { buildPub, drawJukebox, drawSlot, type Pub } from './build.ts';
 import { L } from './lines.ts';
 import { loadVoiceIndex, voiceUrl } from '../../narrative/voice.ts';
+import { CREDITS } from '../../narrative/credits.ts';
 import type { Game } from '../../app/Game.ts';
 import type { ItemId } from '../../sim/items/items.data.ts';
 import { ITEMS } from '../../sim/items/items.data.ts';
@@ -898,12 +899,7 @@ const reality: RealityModule = {
       }
       await game.tweenFx('fade', 1, 3);
       await game.ui.showEndingText(['Išiel si domov.', 'Ežo na teba čakal.'], 4000);
-      await game.ui.showCredits([
-        ['Hra', 'Claude (Anthropic)'],
-        ['Pre', 'm1omg'],
-        ['Modely a textúry', 'Poly Haven, ambientCG (CC0)'],
-        ['Postavy', 'Higgsfield, Krea'],
-      ]);
+      await game.ui.showCredits(CREDITS);
       await game.titleScreen();
     }
 
