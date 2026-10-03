@@ -54,5 +54,7 @@ export interface RealityModule {
   index: number;
   /** Chapter title shown on entry (Slovak). */
   title: string;
+  /** The reality has a flashlight (adds the beam's spot light before shaders compile). */
+  torch?: boolean;
   create(ctx: RealityCtx): Promise<RealityInstance>;
 }

@@ -78,10 +78,10 @@ test('the hotel: the guestbook, three keys, Ežo by the fire and out of the wind
   expect(await until(page, flag(page, 'hotel.ezo'), 60)).toBe(true);
   expect((await a.info()).checkpoint).toBe('salon');
 
-  // out of the window (reality 8 isn't built yet, so the preview ends)
+  // out of the window, into the snow of reality 8
   expect(await a.use('salonWindow')).toBe(true);
   expect(
-    await until(page, () => page.evaluate(() => !!document.querySelector('.ending-text')), 40, 0.25),
+    await until(page, async () => (await a.mode()) === 'play' && (await a.info()).reality === 'r8', 60, 0.5),
   ).toBe(true);
   expect(errors).toEqual([]);
 });

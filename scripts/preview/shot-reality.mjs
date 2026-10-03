@@ -1,4 +1,4 @@
-// Usage: node scripts/preview/shot-reality.mjs "<hash>" <out.png> [steps...] where step = "teleport:x,y,z,yaw" | "wait:s" | "look:dx,dy" | "noise:x,y,z,loudness" | "use:id" | "give:id,n" | "press:action" | "move:x,y[,seconds]" | "info" | "shot"
+// Usage: node scripts/preview/shot-reality.mjs "<hash>" <out.png> [steps...] where step = "teleport:x,y,z,yaw" | "wait:s" | "step:s" | "look:dx,dy" | "noise:x,y,z,loudness" | "use:id" | "give:id,n" | "press:action" | "move:x,y[,seconds]" | "info" | "shot"
 import { chromium } from '@playwright/test';
 const [hash, out, ...steps] = process.argv.slice(2);
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] });
@@ -21,6 +21,8 @@ for (const s of steps) {
     await page.evaluate(([x, y, z, yaw]) => window.__mf42.teleport(x, y, z, yaw), [x, y, z, yaw]);
     await page.evaluate(() => window.__mf42.sim(0.3));
   } else if (k === 'wait') await page.evaluate((s) => window.__mf42.sim(s), Number(v));
+  // like wait, but renders frames (render-side damping such as camera locks advances)
+  else if (k === 'step') await page.evaluate((s) => window.__mf42.frames(Math.round(s * 15), 15), Number(v));
   else if (k === 'look') {
     const [dx, dy] = v.split(',').map(Number);
     await page.evaluate(

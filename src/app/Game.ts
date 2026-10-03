@@ -5,13 +5,14 @@ import {
   LatheGeometry,
   Mesh,
   MeshStandardMaterial,
+  Object3D,
   PointLight,
   Scene,
   SphereGeometry,
+  SpotLight,
   Vector2,
   Vector3,
 } from 'three';
-import type { Object3D } from 'three';
 import { GameLoop, SIM_DT } from '../core/loop.ts';
 import { Rng, freshSeed } from '../core/rng.ts';
 import { Scope } from '../core/scope.ts';
@@ -97,6 +98,8 @@ export class Game {
   hasLight = false;
   lightOn = false;
   lightPower = 1;
+  /** 0..1 how strongly the flashlight burns (a reality with batteries sets this). */
+  torchLevel = 1;
   /** Player is sitting (camera lowered, movement locked until they stand up). */
   seated = false;
   seatedWithDrink = false;
@@ -126,6 +129,10 @@ export class Game {
   private skipRequested = false;
   private heartbeatTimer = 0;
   private lightObj: PointLight;
+  /** The flashlight beam (only in realities that declare a torch: one more light in every shader). */
+  private torchObj: SpotLight;
+  private torchTarget = new Object3D();
+  private torchInScene = false;
   private statsEl: HTMLElement | null = null;
   private statsTimer = 0;
   private frames = 0;
@@ -156,6 +163,9 @@ export class Game {
     this.rig = new CameraRig(this.renderer.camera, this.player);
     this.lightObj = new PointLight(0xffb060, 0, 7, 1.6);
     this.lightObj.castShadow = false;
+    this.torchObj = new SpotLight(0xe6eeff, 0, 18, 0.62, 0.5, 1.4);
+    this.torchObj.castShadow = false;
+    this.torchObj.target = this.torchTarget;
     {
       const glass = new Mesh(
         new LatheGeometry(
@@ -365,6 +375,8 @@ export class Game {
       await Promise.race([Promise.allSettled(mats.pending), new Promise((r) => setTimeout(r, 15000))]);
       loading.progress(0.9);
       scene.add(this.lightObj);
+      this.torchInScene = !!mod.torch;
+      if (this.torchInScene) scene.add(this.torchObj, this.torchTarget);
       scene.add(this.renderer.camera);
       this.renderer.setScene(scene);
       if (this.renderer.profile.ao) this.renderer.rebuild();
@@ -435,7 +447,9 @@ export class Game {
     this.player.frozen = false;
     this.ui.subtitle(null, null);
     this.ui.setPrompt(null);
-    if (this.scene) this.scene.remove(this.lightObj, this.renderer.camera);
+    if (this.scene) this.scene.remove(this.lightObj, this.torchObj, this.torchTarget, this.renderer.camera);
+    this.torchInScene = false;
+    this.torchLevel = 1;
     this.renderer.setScene(null);
     this.scope?.dispose();
     this.scope = null;
@@ -964,8 +978,20 @@ export class Game {
       this.lightObj.position
         .copy(cam.position)
         .add(_to.set(0.25, -0.2, -0.3).applyQuaternion(cam.quaternion));
-      const flick = 0.85 + 0.15 * Math.sin(this.renderTime * 23.0) * Math.sin(this.renderTime * 7.3);
-      this.lightObj.intensity = this.lightOn ? 2.2 * this.lightPower * flick : 0;
+      const torch = this.torchInScene && this.lightPower > 1;
+      const flick = torch
+        ? 1
+        : 0.85 + 0.15 * Math.sin(this.renderTime * 23.0) * Math.sin(this.renderTime * 7.3);
+      // a torch spills a little cold light around you; the lighter is a warm, flickering glow
+      this.lightObj.color.setHex(torch ? 0xc8d4ff : 0xffb060);
+      this.lightObj.intensity = this.lightOn ? (torch ? 0.9 : 2.2 * this.lightPower) * flick : 0;
+      if (this.torchInScene) {
+        const level = clamp(this.torchLevel, 0, 1);
+        this.torchObj.position.copy(this.lightObj.position);
+        this.torchTarget.position.copy(cam.position).add(_to.set(0, 0, -6).applyQuaternion(cam.quaternion));
+        this.torchObj.intensity = this.lightOn && torch ? 34 * (0.25 + 0.75 * level) : 0;
+        this.torchObj.distance = 9 + 11 * level;
+      }
       // first-person drinking
       if (this.drinkTimer > 0 && this.drinkItem) {
         const p = 1 - Math.max(0, this.drinkTimer - alpha * SIM_DT) / this.drinkDuration;
@@ -1013,12 +1039,14 @@ export class Game {
     const g = this.grade;
     this.renderer.grade.setGrade(g);
     const reduce = this.settings.reduceFlashes;
+    // the first tenth of lost body heat does not show yet
+    const chill = clamp((0.9 - st.cold.heat) / 0.9, 0, 1);
     this.renderer.grade.setDynamic({
       time: t,
       fade: this.fx.fade,
       white: reduce ? Math.min(this.fx.white, 0.6) : this.fx.white,
-      vignette: this.fx.vignette + fear * 0.6 + (1 - st.cold.heat) * 0.4,
-      frost: Math.max(this.fx.frost, (1 - st.cold.heat) * 0.9),
+      vignette: this.fx.vignette + fear * 0.6 + chill * 0.4,
+      frost: Math.max(this.fx.frost, chill * 0.9),
       desat: this.fx.desat + fear * 0.35,
       baseSaturation: g.saturation,
     });
