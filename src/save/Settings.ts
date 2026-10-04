@@ -1,4 +1,5 @@
 import { readJSON, writeJSON } from './storage.ts';
+import type { KeyBinds } from '../input/InputManager.ts';
 import type { QualitySetting } from '../render/quality.ts';
 
 export interface Settings {
@@ -21,6 +22,8 @@ export interface Settings {
   resolution: 'auto' | '1' | '0.85' | '0.7' | '0.55';
   /** Frame rate and render statistics in a corner. */
   showFps: boolean;
+  /** Keyboard controls moved to other keys (the rest keep their defaults). */
+  keys: Partial<KeyBinds>;
   warned: boolean;
 }
 
@@ -41,6 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   difficulty: 'normal',
   resolution: 'auto',
   showFps: false,
+  keys: {},
   warned: false,
 };
 

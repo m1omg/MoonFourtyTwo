@@ -1,10 +1,40 @@
 import type { Action, InputSnapshot } from './actions.ts';
 
-const KEY_ACTIONS: Record<string, Action> = {
-  KeyE: 'interact',
-  KeyQ: 'drink',
-  KeyF: 'light',
-  KeyG: 'throw',
+/** Controls the player can move to other keys (Nastavenia → Ovládanie). */
+export const BINDABLE = [
+  'forward',
+  'back',
+  'left',
+  'right',
+  'sprint',
+  'crouch',
+  'interact',
+  'drink',
+  'light',
+  'throw',
+  'journal',
+  'pause',
+] as const;
+export type Bindable = (typeof BINDABLE)[number];
+export type KeyBinds = Record<Bindable, string>;
+
+export const DEFAULT_BINDS: KeyBinds = {
+  forward: 'KeyW',
+  back: 'KeyS',
+  left: 'KeyA',
+  right: 'KeyD',
+  sprint: 'ShiftLeft',
+  crouch: 'KeyC',
+  interact: 'KeyE',
+  drink: 'KeyQ',
+  light: 'KeyF',
+  throw: 'KeyG',
+  journal: 'KeyJ',
+  pause: 'KeyP',
+};
+
+/** Keys that always work, whatever the bindings (arrows, Esc, Tab, numbers, Space, Enter). */
+const FIXED_ACTIONS: Record<string, Action> = {
   Digit1: 'slot1',
   Digit2: 'slot2',
   Digit3: 'slot3',
@@ -12,12 +42,16 @@ const KEY_ACTIONS: Record<string, Action> = {
   Digit5: 'slot5',
   Digit6: 'slot6',
   Escape: 'pause',
-  KeyP: 'pause',
   Tab: 'journal',
-  KeyJ: 'journal',
   Space: 'skip',
   Enter: 'skip',
 };
+
+function keyActions(b: KeyBinds): Record<string, Action> {
+  const a: Record<string, Action> = { ...FIXED_ACTIONS };
+  for (const k of ['interact', 'drink', 'light', 'throw', 'journal', 'pause'] as const) a[b[k]] = k;
+  return a;
+}
 
 const MAX_MOUSE_DELTA = 300; // px; some Chrome builds report huge spikes on pointer-lock changes
 
@@ -45,6 +79,8 @@ export class InputManager {
   };
 
   private keys = new Set<string>();
+  private binds: KeyBinds = { ...DEFAULT_BINDS };
+  private keyActions = keyActions(DEFAULT_BINDS);
   private latched = new Set<Action>();
   private lookDX = 0;
   private lookDY = 0;
@@ -61,6 +97,13 @@ export class InputManager {
   pointerLocked = false;
   /** Called when pointer lock is lost unexpectedly (opens the pause menu). */
   onPointerLockLost: (() => void) | null = null;
+
+  /** Moves controls to other keys (missing entries keep their defaults). */
+  setBinds(b: Partial<KeyBinds>): void {
+    this.binds = { ...DEFAULT_BINDS, ...b };
+    this.keyActions = keyActions(this.binds);
+    this.keys.clear();
+  }
 
   attach(target: HTMLElement): void {
     this.target = target;
@@ -192,10 +235,11 @@ export class InputManager {
     let mx = 0;
     let my = 0;
     if (this.enabled) {
-      if (k.has('KeyA') || k.has('ArrowLeft')) mx -= 1;
-      if (k.has('KeyD') || k.has('ArrowRight')) mx += 1;
-      if (k.has('KeyW') || k.has('ArrowUp')) my += 1;
-      if (k.has('KeyS') || k.has('ArrowDown')) my -= 1;
+      const b = this.binds;
+      if (k.has(b.left) || k.has('ArrowLeft')) mx -= 1;
+      if (k.has(b.right) || k.has('ArrowRight')) mx += 1;
+      if (k.has(b.forward) || k.has('ArrowUp')) my += 1;
+      if (k.has(b.back) || k.has('ArrowDown')) my -= 1;
       mx += this.touchMove.x + this.gpMove.x;
       my += this.touchMove.y + this.gpMove.y;
     }
@@ -209,23 +253,21 @@ export class InputManager {
     return {
       moveX: mx,
       moveY: my,
-      sprint:
-        this.enabled && (k.has('ShiftLeft') || k.has('ShiftRight') || this.touchSprint || this.gpSprint),
-      crouch: this.enabled && (k.has('ControlLeft') || k.has('KeyC') || this.crouchToggle || this.gpCrouch),
+      sprint: this.enabled && (k.has(this.binds.sprint) || this.touchSprint || this.gpSprint),
+      crouch: this.enabled && (k.has(this.binds.crouch) || this.crouchToggle || this.gpCrouch),
       pressed,
     };
   }
 
   private onKeyDown = (e: KeyboardEvent): void => {
     if (e.code === 'Tab') e.preventDefault();
+    const a = this.keyActions[e.code];
     if (!this.enabled) {
-      if (KEY_ACTIONS[e.code] === 'pause' || KEY_ACTIONS[e.code] === 'skip')
-        this.latched.add(KEY_ACTIONS[e.code]!);
+      if (a === 'pause' || a === 'skip') this.latched.add(a);
       return;
     }
     if (e.repeat) return;
     this.keys.add(e.code);
-    const a = KEY_ACTIONS[e.code];
     if (a) this.latched.add(a);
   };
 

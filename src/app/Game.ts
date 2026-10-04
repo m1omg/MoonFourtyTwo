@@ -224,6 +224,7 @@ export class Game {
     this.input.look.mouseSensitivity = 0.0022 * s.mouseSensitivity;
     this.input.look.touchSensitivity = 0.0045 * s.touchSensitivity;
     this.input.look.invertY = s.invertY;
+    this.input.setBinds(s.keys);
     this.renderer.camera.fov = s.fov;
     this.renderer.camera.updateProjectionMatrix();
     this.audio.setVolume('master', s.master);

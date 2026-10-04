@@ -1,6 +1,7 @@
 import { el, wait } from './dom.ts';
 import { t, sk } from '../i18n/sk.ts';
 import type { Settings } from '../save/Settings.ts';
+import { BINDABLE, DEFAULT_BINDS, type Bindable } from '../input/InputManager.ts';
 import type { ItemId } from '../sim/items/items.data.ts';
 import { ITEMS } from '../sim/items/items.data.ts';
 
@@ -269,6 +270,7 @@ export class UI {
         ['medium', t('medium')],
         ['large', t('large')],
       ]);
+      rows.push(this.keyRows(s, onChange));
       const back = el('button', { class: 'btn', type: 'button' }, t('menuBack'));
       this.screen('dim', el('div', { class: 'panel' }, el('h2', {}, t('settingsTitle')), ...rows, back));
       back.addEventListener('click', () => {
@@ -276,6 +278,65 @@ export class UI {
         resolve();
       });
     });
+  }
+
+  /** Key bindings: click a key, press the new one (a key taken elsewhere swaps places). */
+  private keyRows(s: Settings, onChange: (s: Settings) => void): HTMLElement {
+    const names: Record<Bindable, string> = {
+      forward: t('keyForward'),
+      back: t('keyBack'),
+      left: t('keyLeft'),
+      right: t('keyRight'),
+      sprint: t('keySprint'),
+      crouch: t('keyCrouch'),
+      interact: t('keyInteract'),
+      drink: t('keyDrink'),
+      light: t('keyLight'),
+      throw: t('keyThrow'),
+      journal: t('keyJournal'),
+      pause: t('keyPause'),
+    };
+    const box = el('div', { class: 'keys' });
+    let stopListening: (() => void) | null = null;
+    const draw = () => {
+      stopListening?.();
+      const binds = { ...DEFAULT_BINDS, ...s.keys };
+      box.replaceChildren(el('h3', {}, t('setKeys')), el('p', { class: 'keys-hint' }, t('setKeysHint')));
+      for (const a of BINDABLE) {
+        const b = el('button', { class: 'btn key', type: 'button' }, keyName(binds[a]));
+        b.addEventListener('click', () => {
+          stopListening?.();
+          b.textContent = t('setKeysPress');
+          const onKey = (e: KeyboardEvent) => {
+            if (!box.isConnected) return stopListening?.(); // the settings were closed
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (e.code !== 'Escape') {
+              const other = BINDABLE.find((o) => o !== a && binds[o] === e.code);
+              if (other) s.keys = { ...s.keys, [other]: binds[a] };
+              s.keys = { ...s.keys, [a]: e.code };
+              onChange(s);
+            }
+            draw();
+          };
+          window.addEventListener('keydown', onKey, { capture: true });
+          stopListening = () => {
+            window.removeEventListener('keydown', onKey, { capture: true });
+            stopListening = null;
+          };
+        });
+        box.append(el('div', { class: 'setting' }, el('label', {}, names[a]), b));
+      }
+      const reset = el('button', { class: 'btn', type: 'button' }, t('setKeysReset'));
+      reset.addEventListener('click', () => {
+        s.keys = {};
+        onChange(s);
+        draw();
+      });
+      box.append(reset);
+    };
+    draw();
+    return box;
   }
 
   showLoading(tipIndex: number): { progress(p: number): void; close(): void } {
@@ -483,4 +544,34 @@ function escapeHtml(s: string): string {
     /[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!,
   );
+}
+
+/** A key code as the player knows it (KeyE → E, ShiftLeft → Shift ľavý). */
+function keyName(code: string): string {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit\d$/.test(code)) return code.slice(5);
+  if (/^Numpad/.test(code)) return `Num ${code.slice(6)}`;
+  const side = code.endsWith('Left') ? ' ľavý' : code.endsWith('Right') ? ' pravý' : '';
+  const base = code.replace(/(Left|Right)$/, '');
+  const names: Record<string, string> = {
+    Shift: 'Shift',
+    Control: 'Ctrl',
+    Alt: 'Alt',
+    Meta: 'Win',
+    Space: 'Medzerník',
+    CapsLock: 'Caps Lock',
+    Backquote: '`',
+    Minus: '-',
+    Equal: '=',
+    BracketLeft: '[',
+    BracketRight: ']',
+    Semicolon: ';',
+    Quote: "'",
+    Backslash: '\\',
+    Comma: ',',
+    Period: '.',
+    Slash: '/',
+  };
+  if (code === 'BracketLeft' || code === 'BracketRight') return names[code]!;
+  return (names[base] ?? code) + side;
 }
