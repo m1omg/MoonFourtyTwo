@@ -74,7 +74,7 @@ export class CameraRig {
 
     // Drunk sway (render time based).
     const t = fx.renderTime;
-    const drunk = fx.steady ? 0 : clamp((fx.bac - 0.3) / 2.2, 0, 1) * m;
+    const drunk = fx.steady ? 0 : clamp((fx.bac - 0.8) / 2.2, 0, 1) * m;
     const swayX = (Math.sin(t * 0.61) * 0.6 + Math.sin(t * 1.37) * 0.4) * 0.05 * drunk;
     const swayY = Math.sin(t * 0.83 + 1.2) * 0.025 * drunk;
     const targetRoll = (Math.sin(t * 0.47) * 0.6 + Math.sin(t * 1.13 + 0.5) * 0.4) * 0.06 * drunk;

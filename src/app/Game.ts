@@ -675,7 +675,8 @@ export class Game {
 
     const st = this.status;
     const bac = st.intox.bac;
-    const drunk = st.buffs.has('steady') ? 0 : clamp((bac - 0.6) / 2, 0, 1);
+    // the walk only starts to wander once you are properly tipsy
+    const drunk = st.buffs.has('steady') ? 0 : clamp((bac - 1.0) / 2, 0, 1);
     const t = this.clock.time;
     const sway = drunk * (Math.sin(t * 0.9) * 0.25 + Math.sin(t * 2.3 + 1) * 0.1);
     this.waterDepth = this.reality?.waterDepth?.(this.player.pos) ?? 0;
@@ -1118,15 +1119,16 @@ export class Game {
     const m = this.settings.motion;
     const steady = st.buffs.has('steady');
     const t = this.renderTime;
-    const d = steady ? 0 : clamp((bac - 0.4) / 2.4, 0, 1);
+    // a beer or two leaves the picture alone; the warp comes later, double vision and blur much later
+    const d = steady ? 0 : clamp((bac - 0.8) / 2.2, 0, 1);
     const absinthe = st.buffs.has('absinthe') ? 1 : 0;
     const fear = st.fear.value;
     // the comfort slider tones the drunk view down too (never all the way: you should know you are drunk)
     const k = 0.35 + 0.65 * m;
     this.renderer.drunk.set({
-      double: steady ? 0 : clamp((bac - 1.1) / 1.6, 0, 1) * (0.55 + 0.45 * Math.sin(t * 0.37) ** 2) * k,
+      double: steady ? 0 : clamp((bac - 1.5) / 1.5, 0, 1) * (0.55 + 0.45 * Math.sin(t * 0.37) ** 2) * k,
       aberr: clamp(d * 0.6 + fear * 0.5 + absinthe * 0.6, 0, 1.4) * k,
-      blur: steady ? 0 : clamp((bac - 2.0) / 1.0, 0, 1) * 0.7 * k,
+      blur: steady ? 0 : clamp((bac - 2.3) / 0.7, 0, 1) * 0.7 * k,
       dirX: Math.cos(t * 0.21),
       dirY: Math.sin(t * 0.17) * 0.3,
     });

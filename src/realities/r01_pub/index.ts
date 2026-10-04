@@ -669,7 +669,8 @@ const reality: RealityModule = {
           s.busy = true;
           try {
             if (!game.flags.has('pub.intro')) {
-              game.status.intox.set(Math.max(game.status.intox.bac, 0.55));
+              // the first beer of the evening: you arrive almost sober
+              game.status.intox.set(Math.max(game.status.intox.bac, 0.3));
               game.inventory.add('pivo', 1);
               game.inventory.select(0);
               await game.clock.wait(1.6);
@@ -719,7 +720,7 @@ const reality: RealityModule = {
             game.flags.has('pub.intro') &&
             !roundItem &&
             !s.busy &&
-            game.clock.time - s.lastRoundAt > 75 &&
+            game.clock.time - s.lastRoundAt > 100 &&
             s.rounds >= 1
           ) {
             s.lastRoundAt = game.clock.time;

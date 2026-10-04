@@ -13,7 +13,8 @@ export const GAME_SCALE = 1.6;
 export const BASE_ELIMINATION = 0.15 / 60;
 
 export const BAC_TIPSY = 0.5;
-export const BAC_DRUNK = 1.2;
+/** From here drunk eyes see what sober ones do not. */
+export const BAC_DRUNK = 1.0;
 export const BAC_WASTED = 2.0;
 export const BAC_OKNO = 3.0;
 
