@@ -201,6 +201,11 @@ export class Game {
     this.input.onPointerLockLost = () => {
       if (this.mode === 'play' && !this.ui.modal && !this.ui.choosing) void this.openPause();
     };
+    // leaving the tab or the window pauses the game (phones too, where there is no mouse lock)
+    this.input.onHidden = () => {
+      if (this.mode === 'play' && !this.ui.modal && !this.ui.choosing && !this.debug.test)
+        void this.openPause();
+    };
     const touchCapable = (navigator.maxTouchPoints ?? 0) > 0 && matchMedia('(pointer: coarse)').matches;
     if (touchCapable) {
       this.touch = new TouchControls(uiRoot, this.input);
@@ -470,7 +475,13 @@ export class Game {
       this.input.setEnabled(true);
       this.ui.setHudVisible(true);
       this.touch?.setVisible(true);
-      if (!this.touch && !this.debug.test) void this.input.requestPointerLock();
+      if (!this.touch && !this.debug.test) {
+        // finished loading while the player was in another tab or window: wait for them paused
+        // instead of grabbing the mouse there
+        if (document.visibilityState === 'visible' && document.hasFocus())
+          void this.input.requestPointerLock();
+        else queueMicrotask(() => void this.openPause());
+      }
       this.saveCheckpoint(cpId);
       runScript(async () => inst.start(cpId));
       if (!fromSave && !this.debug.test) void this.ui.chapter(mod.title);
@@ -594,13 +605,19 @@ export class Game {
   }
 
   /** Shows a subtitle line and waits (voice clip length or reading time). Skippable. */
-  async say(who: string | null, text: string, voiceUrl?: string, minSeconds = 0): Promise<void> {
+  async say(
+    who: string | null,
+    text: string,
+    voiceUrl?: string | readonly string[],
+    minSeconds = 0,
+  ): Promise<void> {
     // A newer line takes over the subtitle and ends this one early; only the current line clears it.
     const id = ++this.lineId;
     let seconds = Math.max(1.8, text.length / 14 + 0.7, minSeconds);
     let handle: { stop(f?: number): void } | null = null;
     if (voiceUrl && this.audio.ctx) {
-      const buf = await this.audio.load(voiceUrl);
+      if (this.audio.ctx.state === 'suspended') void this.audio.ctx.resume();
+      const buf = await this.audio.loadFirst(typeof voiceUrl === 'string' ? [voiceUrl] : voiceUrl);
       if (id !== this.lineId) return;
       if (buf) {
         seconds = Math.max(minSeconds, buf.duration + 0.35);
@@ -609,6 +626,7 @@ export class Game {
     }
     this.ui.subtitle(who, text);
     this.skipRequested = false;
+    this.lineShownAt = this.clock.time;
     await this.clock.until(() => this.skipRequested || id !== this.lineId, seconds);
     if (this.skipRequested || id !== this.lineId) handle?.stop(0.15);
     if (id === this.lineId) this.ui.subtitle(null, null);
@@ -616,6 +634,12 @@ export class Game {
 
   /** Increments with every line said (see `say`). */
   private lineId = 0;
+  /** When the current line appeared: a click in its first moment (still meant for something else) does not skip it. */
+  private lineShownAt = -Infinity;
+
+  private requestSkip(): void {
+    if (this.clock.time - this.lineShownAt > 0.4) this.skipRequested = true;
+  }
 
   async choose(options: string[]): Promise<number> {
     const hadLock = this.input.pointerLocked;
@@ -767,10 +791,10 @@ export class Game {
           void this.openPause();
           break;
         case 'skip':
-          this.skipRequested = true;
+          this.requestSkip();
           break;
         case 'interact':
-          if (!this.interactions.use()) this.skipRequested = true;
+          if (!this.interactions.use()) this.requestSkip();
           break;
         case 'drink':
           this.startDrink();

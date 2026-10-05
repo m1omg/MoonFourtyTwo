@@ -15,6 +15,7 @@ export const L: Lines = {
   e_intro2: { who: E, text: 'Zajtra začíname kúriť. Vraj má prísť prvý mráz.', laugh: true },
   e_intro3: { who: E, text: 'No. Na zdravie, starý!' },
   e_intro4: { who: E, text: 'Dopi, nech si môžeme dať ešte jedno.' },
+  e_intro5: { who: E, text: 'No vidíš. A je dopité.' },
   e_order1: { who: E, text: 'Zájdi za Vierkou, nech nám naleje dve borovičky. Ja tu postrážim stôl.' },
   e_order2: { who: E, text: 'Aby nám ho niekto neukradol. Dnes je tu nejako mŕtvo.' },
   e_wait: { who: E, text: 'No čo, smädný som ja, nie stôl.' },
@@ -41,8 +42,28 @@ export const L: Lines = {
   e_pivo1: { who: E, text: 'Pivo je pivo. Na zdravie!' },
   e_mal1: { who: E, text: 'Malinovka? No dobre. Ty malinovku, ja tvoju borovičku.', laugh: true },
   e_cheers: { who: E, text: 'Na zdravie!' },
+  e_ahead: { who: E, text: 'Ty si už svoje vypil? No nič, tak aspoň ja. Na zdravie!', laugh: true },
   e_another: { who: E, text: 'Vierka! Ešte dve!' },
   e_skip: { who: E, text: 'Čo je s tebou dnes? Veď sme len začali.' },
+  e_fetch: { who: E, text: 'Vierka to už naliala. Dones to, starý, nech to nevyprchá.' },
+
+  // ── after each round: the evening moves on (each said once) ──
+  e_round1: {
+    who: E,
+    text: 'Vieš, čo je na kotolni najhoršie? Ticho, keď vyhasne. To potom počuješ aj vlastné srdce.',
+  },
+  e_round2: { who: E, text: 'Ráno tam musím byť o piatej. Kým prídu deti, musí byť teplo.' },
+  e_round3: {
+    who: E,
+    text: 'Pamätáš sa, kedy sme sem prišli prvýkrát? Ja už nie. Akoby sme tu sedeli odjakživa.',
+  },
+  e_round4: {
+    who: E,
+    text: 'Vierka nám zase pripísala čiarku. Tá to počíta lepšie ako my dvaja.',
+    laugh: true,
+  },
+  e_round5: { who: E, text: 'Ešte jedno, starý. Vždy ešte jedno.' },
+  e_nudge: { who: E, text: 'Choď už, starý. Ja ti tu postrážim miesto aj pivo.' },
 
   // ── talk menu ──
   e_talk: { who: E, text: 'Hm?' },
@@ -68,6 +89,8 @@ export const L: Lines = {
     text: 'Stará fotka: „U Kolesa, 1906". Dvaja chlapi pri tomto istom stole. Ten veľký vyzerá ako Ežo.',
   },
   t_clock: { who: null, text: 'Sekundová ručička skočila dozadu. Alebo sa mi to len zdalo.' },
+  t_clock0: { who: null, text: 'Pol desiatej. Ešte je skoro.' },
+  t_round: { who: null, text: 'Na pulte stoja dva poháre. Kolesárova runda.' },
   t_tv: { who: null, text: 'Zase ten istý gól.' },
   t_tv_glitch: { who: null, text: 'Skóre na sekundu ukázalo nejaký nezmysel.' },
   t_mats: { who: null, text: 'Na tácke sú tisíce čiarok. Niekto tu pil veľmi, veľmi dlho.' },
@@ -105,6 +128,7 @@ export const L: Lines = {
   e_r2_4: { who: E, text: 'Vierka má kľúče od dverí. V zástere. Vezmi ich a choď von. Ja dopijem a prídem.' },
   e_r2_5: { who: E, text: 'A vezmi si z police borovičku. Jalovec, pamätáš?' },
   e_r2_6: { who: E, text: 'Choď prvý. Ja prídem.' },
+  e_r2_keys: { who: E, text: 'Kľúče má Vierka v zástere. A tých dvoch nespúšťaj z očí.' },
   t_frozen: { who: null, text: 'Pivo z pípy visí vo vzduchu.' },
   t_clock2: { who: null, text: 'Hodiny nemajú ručičky.' },
   t_tv2: { who: null, text: 'Televízor ukazuje túto krčmu. Zhora. Stojím tam… a za mnou…' },

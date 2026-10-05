@@ -166,6 +166,15 @@ export class AudioSystem {
     return p;
   }
 
+  /** The first of several encodings of one sound that this browser can decode. */
+  async loadFirst(urls: readonly string[]): Promise<AudioBuffer | null> {
+    for (const url of urls) {
+      const b = await this.load(url);
+      if (b) return b;
+    }
+    return null;
+  }
+
   private decode(ab: ArrayBuffer): Promise<AudioBuffer> {
     // A context can decode even while suspended; create an offline one if not unlocked yet.
     const ctx = this.ctx ?? new OfflineAudioContext(1, 1, 44100);

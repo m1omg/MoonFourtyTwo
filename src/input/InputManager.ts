@@ -97,6 +97,8 @@ export class InputManager {
   pointerLocked = false;
   /** Called when pointer lock is lost unexpectedly (opens the pause menu). */
   onPointerLockLost: (() => void) | null = null;
+  /** Called when the page is hidden (another tab, minimised) or the window loses focus. */
+  onHidden: (() => void) | null = null;
 
   /** Moves controls to other keys (missing entries keep their defaults). */
   setBinds(b: Partial<KeyBinds>): void {
@@ -110,6 +112,7 @@ export class InputManager {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     window.addEventListener('blur', this.onBlur);
+    document.addEventListener('visibilitychange', this.onVisibility);
     document.addEventListener('mousemove', this.onMouseMove);
     document.addEventListener('pointerlockchange', this.onLockChange);
     target.addEventListener('wheel', this.onWheel, { passive: true });
@@ -120,6 +123,7 @@ export class InputManager {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('blur', this.onBlur);
+    document.removeEventListener('visibilitychange', this.onVisibility);
     document.removeEventListener('mousemove', this.onMouseMove);
     document.removeEventListener('pointerlockchange', this.onLockChange);
     this.target?.removeEventListener('wheel', this.onWheel);
@@ -135,9 +139,17 @@ export class InputManager {
     }
   }
 
+  /**
+   * The mouse may only be captured while this tab is the one in front and focused. Loading often
+   * finishes while the player waits in another tab; grabbing the mouse then would steal it there.
+   */
+  private canLock(): boolean {
+    return document.visibilityState === 'visible' && document.hasFocus();
+  }
+
   async requestPointerLock(): Promise<void> {
     const el = this.target;
-    if (!el || document.pointerLockElement === el) return;
+    if (!el || document.pointerLockElement === el || !this.canLock()) return;
     try {
       // unadjustedMovement gives raw deltas without OS acceleration where supported.
       await (el.requestPointerLock as (o?: { unadjustedMovement?: boolean }) => Promise<void> | void).call(
@@ -277,7 +289,21 @@ export class InputManager {
 
   private onBlur = (): void => {
     this.keys.clear();
+    this.letGo();
   };
+
+  private onVisibility = (): void => {
+    if (document.visibilityState !== 'visible') {
+      this.keys.clear();
+      this.letGo();
+    }
+  };
+
+  /** Releases the mouse (some browsers keep the lock across a tab switch) and tells the game. */
+  private letGo(): void {
+    this.exitPointerLock();
+    this.onHidden?.();
+  }
 
   private onMouseMove = (e: MouseEvent): void => {
     if (!this.enabled || !this.pointerLocked) return;
@@ -303,6 +329,11 @@ export class InputManager {
   };
 
   private onLockChange = (): void => {
+    // a lock granted after the player already left (a late request racing a tab switch)
+    if (document.pointerLockElement === this.target && !this.canLock()) {
+      document.exitPointerLock();
+      return;
+    }
     const locked = document.pointerLockElement === this.target;
     const wasLocked = this.pointerLocked;
     this.pointerLocked = locked;

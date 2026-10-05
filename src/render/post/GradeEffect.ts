@@ -17,6 +17,17 @@ uniform float uFrost;     // cold overlay
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
+// Film grain from an integer hash of the pixel and the frame (pcg3d). The sine hash above, fed
+// with screen coordinates, turns into bands and moiré on GPUs with less precise sin().
+float grainNoise(vec2 fragCoord, float t) {
+  uvec3 v = uvec3(uvec2(max(fragCoord, vec2(0.0))), uint(t * 24.0));
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  v ^= v >> 16u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  return float(v.x) * (1.0 / 4294967296.0);
+}
+
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
   vec3 c = inputColor.rgb;
   c = pow(max(c * uGain + uLift * (1.0 - c), 0.0), 1.0 / max(uGamma, vec3(0.01)));
@@ -32,8 +43,11 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
     float n = hash(floor(uv * 180.0)) * 0.5 + 0.5;
     c = mix(c, vec3(0.82, 0.9, 1.0) * n, edge * uFrost * 0.75);
   }
-  float g = hash(uv * 1024.0 + fract(uTime * 7.31)) - 0.5;
-  c += g * uGrain;
+  // grain is even to the eye: added on a perceptual (square-root) scale, so the darks do not drown
+  // in it while the lights still show it
+  float g = grainNoise(gl_FragCoord.xy, uTime) - 0.5;
+  vec3 pc = sqrt(max(c, 0.0)) + g * uGrain;
+  c = pc * max(pc, 0.0);
   c = mix(c, vec3(0.0), uFade);
   c = mix(c, vec3(1.0), uWhite);
   outputColor = vec4(max(c, 0.0), inputColor.a);

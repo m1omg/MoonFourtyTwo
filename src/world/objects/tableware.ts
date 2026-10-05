@@ -103,11 +103,11 @@ export class Tableware {
     g.add(glass, handle);
     if (fill > 0.02) {
       const beer = new Mesh(this.beerGeo, this.beer);
-      beer.scale.y = fill;
-      beer.position.y = 0.012 + (0.13 * fill) / 2;
       const foam = new Mesh(this.foamGeo, this.foam);
-      foam.position.y = 0.012 + 0.13 * fill + 0.008;
       g.add(beer, foam);
+      g.userData.beer = beer;
+      g.userData.foam = foam;
+      setMugFill(g, fill);
     }
     g.userData.kind = 'mug';
     return g;
@@ -165,6 +165,23 @@ export class Tableware {
     m.receiveShadow = true;
     return m;
   }
+}
+
+/**
+ * Changes how much beer a mug holds (one made with some beer in it); 0 leaves an empty glass with
+ * a little foam stuck to the bottom.
+ */
+export function setMugFill(mug: Group, fill: number): void {
+  const beer = mug.userData.beer as Mesh | undefined;
+  const foam = mug.userData.foam as Mesh | undefined;
+  if (!beer || !foam) return;
+  const f = Math.max(0, Math.min(1, fill));
+  beer.visible = f > 0.02;
+  beer.scale.y = Math.max(f, 0.001);
+  beer.position.y = 0.012 + (0.13 * f) / 2;
+  foam.position.y = 0.012 + 0.13 * f + 0.008;
+  // the dregs: a thin film of foam on the bottom of an emptied glass
+  foam.scale.set(f > 0.02 ? 1 : 0.92, f > 0.02 ? 1 : 0.25, f > 0.02 ? 1 : 0.92);
 }
 
 /** A beer mat texture with Vierka's tally marks ("čiarky"). Returns a redraw function. */

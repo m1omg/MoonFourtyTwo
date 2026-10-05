@@ -4,6 +4,7 @@ import {
   CanvasTexture,
   Color,
   CylinderGeometry,
+  DoubleSide,
   FogExp2,
   Group,
   HemisphereLight,
@@ -14,6 +15,7 @@ import {
   PointLight,
   SphereGeometry,
   SpotLight,
+  TorusGeometry,
   Vector3,
 } from 'three';
 import type { Object3D, Texture } from 'three';
@@ -32,6 +34,8 @@ export interface Pub {
   tw: Tableware;
   ezo: Character | null;
   vierka: Character | null;
+  /** The bar's key ring on Vierka's apron (taken in the frozen pub). */
+  vierkaKeys: Object3D | null;
   jano: Object3D | null;
   fero: Object3D | null;
   tv: HockeyTV;
@@ -44,8 +48,13 @@ export interface Pub {
   wcDoor: Door;
   stallDoor: Door;
   ourMat: { tex: CanvasTexture; draw(n: number): void };
-  playerMug: Object3D;
-  ezoMug: Object3D;
+  /** The player's glass at the table: a mug (beer, emptied when drunk) and a shot glass. */
+  playerMug: Group;
+  playerShot: Group;
+  ezoMug: Group;
+  /** A round Ežo ordered, waiting on the counter (two mugs or two shots). */
+  counterMugs: Group[];
+  counterShots: Group[];
   lampLights: PointLight[];
   lampMeshes: Mesh[];
   barLight: PointLight;
@@ -60,6 +69,8 @@ export interface Pub {
   ezoSeat: Vector3;
   vierkaSpot: Vector3;
   nav: NavGrid;
+  /** The nav cell in the WC doorway (closed door = no way through). */
+  wcDoorCell: [number, number];
   glyph: Mesh;
   beerStream: Mesh;
   cellarHatch: Mesh;
@@ -321,10 +332,15 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   }
   const vierka = makeChar('vierka');
   const vierkaSpot = new Vector3(-1.4, 0.02, -3.7);
+  let vierkaKeys: Object3D | null = null;
   if (vierka) {
     vierka.pose = 'stand';
     vierka.armOnTable = false;
     vierka.root.position.copy(vierkaSpot);
+    // her green apron (the generated model lost it), with the bar's keys clipped to it
+    const apron = barApron(scope);
+    vierka.root.add(apron.root);
+    vierkaKeys = apron.keys;
   }
   const jano = props.place('jano', {
     pos: [-4.85, 0, 2.15],
@@ -348,8 +364,22 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   const playerMug = tw.mug(0.9);
   playerMug.position.set(3.2, tableTop + 0.004, 2.86);
   scene.add(playerMug);
+  // a distinct (not shared) spirit colour per glass: the script tints it for the drink poured
+  const shotGlass = () => tw.shot(0.8, 0xf2efe7);
+  const playerShot = shotGlass();
+  playerShot.position.set(3.05, tableTop + 0.006, 2.98); // on our beer mat
+  playerShot.visible = false;
+  scene.add(playerShot);
+  const counterMugs = [tw.mug(0.9), tw.mug(0.9)];
+  const counterShots = [shotGlass(), shotGlass()];
+  for (const [i, g] of [...counterMugs, ...counterShots].entries()) {
+    g.position.set(-0.95 + (i % 2) * 0.14, 1.1, -2.82 + (i % 2) * 0.05);
+    g.visible = false;
+    scene.add(g);
+  }
   const ezoMug = tw.mug(0.6);
-  if (ezo) ezo.attach('RightHand', ezoMug, [0.02, -0.07, 0.06], [0, 0, Math.PI / 2]);
+  // stands on the table in front of his fist, handle in his fingers; lifts with his hand
+  if (ezo) ezo.holdOnTable(ezoMug, tableTop + 0.004, 0.15);
   const crowdMat = tallyTexture(scope, 3871, 7);
   for (const [x, z] of [
     [-1.1, 2.9],
@@ -598,7 +628,9 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   const nav = new NavGrid(Math.round(21 / 0.5), Math.round(10 / 0.5), 0.5, -9.5, -5);
   nav.fillRect(-5.8, -2.4, 5.8, 4.3, Area.WALK);
   nav.fillRect(-8.8, -3.0, -6.0, 0.0, Area.WALK);
-  nav.fillRect(-6.2, -1.6, -5.8, -0.8, Area.WALK | Area.DOOR);
+  // the WC's strip along the shared wall touches the room's edge cells: only the doorway connects
+  nav.fillRect(-6.5, -3.0, -6.0, 0.0, 0, true);
+  nav.fillRect(-6.5, -1.5, -5.5, -1.0, Area.WALK | Area.DOOR);
   const block = (x0: number, z0: number, x1: number, z1: number) => nav.fillRect(x0, z0, x1, z1, 0, true);
   block(2.4, 2.6, 3.6, 3.9);
   block(-5.0, 1.9, -3.6, 3.3);
@@ -613,6 +645,7 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
     tw,
     ezo,
     vierka,
+    vierkaKeys,
     jano,
     fero,
     tv,
@@ -626,7 +659,10 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
     stallDoor,
     ourMat,
     playerMug,
+    playerShot,
     ezoMug,
+    counterMugs,
+    counterShots,
     lampLights,
     lampMeshes,
     barLight,
@@ -639,12 +675,56 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
     ezoSeat,
     vierkaSpot,
     nav,
+    wcDoorCell: nav.toCell(-6.25, -1.25),
     glyph,
     beerStream,
     cellarHatch,
     photoTex,
     stoveGlow,
   };
+}
+
+/**
+ * A barmaid's apron in Vierka's character space (she faces +z): a curved canvas front from the
+ * waist to above the knees, a waistband and a key ring.
+ */
+function barApron(scope: RealityCtx['scope']): { root: Group; keys: Group } {
+  const root = new Group();
+  const canvasMat = scope.add(
+    new MeshStandardMaterial({ color: 0x4f8262, roughness: 0.92, side: DoubleSide }),
+  );
+  const darker = scope.add(new MeshStandardMaterial({ color: 0x3b654c, roughness: 0.92, side: DoubleSide }));
+  // the body's front is ~0.15 m ahead of the hip joint; the arc stays just clear of it
+  const front = new Mesh(
+    scope.add(new CylinderGeometry(0.19, 0.205, 0.5, 14, 1, true, -0.78, 1.56)),
+    canvasMat,
+  );
+  front.position.set(0, 0.68, -0.02);
+  const band = new Mesh(
+    scope.add(new CylinderGeometry(0.192, 0.192, 0.035, 18, 1, true, -1.25, 2.5)),
+    darker,
+  );
+  band.position.set(0, 0.935, -0.02);
+  root.add(front, band);
+  // keys hanging from a ring on the waistband, at her right hip
+  const keys = new Group();
+  const steel = scope.add(new MeshStandardMaterial({ color: 0xb8b4a8, metalness: 0.9, roughness: 0.35 }));
+  const ring = new Mesh(scope.add(new TorusGeometry(0.022, 0.0035, 6, 16)), steel);
+  keys.add(ring);
+  for (const [dx, rz] of [
+    [-0.01, 0.25],
+    [0.006, -0.12],
+    [0.016, -0.4],
+  ] as Array<[number, number]>) {
+    const key = new Mesh(scope.add(new BoxGeometry(0.009, 0.055, 0.003)), steel);
+    key.position.set(dx, -0.045, 0.002);
+    key.rotation.z = rz;
+    keys.add(key);
+  }
+  keys.position.set(-0.075, 0.9, 0.172);
+  keys.rotation.y = -0.4;
+  root.add(keys);
+  return { root, keys };
 }
 
 function silhouette(scope: RealityCtx['scope'], mat: MeshStandardMaterial): Group {
