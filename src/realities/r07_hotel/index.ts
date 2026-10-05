@@ -298,6 +298,8 @@ const reality: RealityModule = {
             game.synth.clink(key.position, 0.5);
             game.ui.toast(`Kľúče od salóniku: ${st.keys}/3`, 3000);
             line(st.keys >= 3 ? 't_keys3' : 't_key');
+            // keep it: a blackout afterwards wakes you at the reception with the keys you have
+            game.saveCheckpoint('book');
           },
         });
       }

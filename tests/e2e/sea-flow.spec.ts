@@ -65,13 +65,32 @@ test('the silent sea: three eons of Čierne, the path of light and the window', 
   const a = api(page);
   expect((await a.info()).reality).toBe('r10');
 
-  // a shot of Čierne at a time: each one an eon, and the two lights turn a little further
-  for (let i = 0; i < 3; i++) {
-    expect(await a.use(`cierne:${i}`)).toBe(true);
-    await a.press('drink');
-    expect(await until(page, async () => !!(await a.info()).flags[`more.skip${i + 1}`], 20, 0.5)).toBe(true);
-    await a.sim(1);
-  }
+  const cierne = () =>
+    page.evaluate(() =>
+      (window as unknown as { __mf42: { inventory(): Array<{ item: string | null; count: number }> } }).__mf42
+        .inventory()
+        .reduce((n, sl) => n + (sl.item === 'cierne' ? sl.count : 0), 0),
+    );
+  const skipped = (n: number) => until(page, async () => !!(await a.info()).flags[`more.skip${n}`], 20, 0.5);
+  // two shots in hand; the second one drunk while the first eon is still going by is not lost
+  // (there are exactly three shots for three eons): it stays in your hand
+  expect(await a.use('cierne:0')).toBe(true);
+  expect(await a.use('cierne:1')).toBe(true);
+  await a.press('drink');
+  await a.sim(1.5);
+  await a.press('drink');
+  expect(await skipped(1)).toBe(true);
+  await a.sim(1);
+  expect(await cierne()).toBe(1);
+  expect((await a.info()).flags['more.skip2']).toBeFalsy();
+  // then one eon per shot, and the two lights turn a little further each time
+  await a.press('drink');
+  expect(await skipped(2)).toBe(true);
+  await a.sim(1);
+  expect(await a.use('cierne:2')).toBe(true);
+  await a.press('drink');
+  expect(await skipped(3)).toBe(true);
+  await a.sim(1);
   // one behind the other now: a path of frozen light leads over the water to the window
   await a.teleport(0, 0.2, -150, 0);
   await a.sim(1);
