@@ -351,7 +351,8 @@ const reality: RealityModule = {
     // frozen-pub interactions
     I.add({
       id: 'keys',
-      pos: pub.vierkaSpot.clone().add(new Vector3(0, 0.95, 0.15)),
+      // the ring on her apron
+      pos: pub.vierkaSpot.clone().add(new Vector3(-0.075, 0.9, 0.17)),
       radius: 0.3,
       range: 2.6,
       prompt: 'Vziať kľúče zo zástery',
@@ -838,6 +839,8 @@ const reality: RealityModule = {
         // nobody walks through the closed WC door
         const [dcx, dcz] = pub.wcDoorCell;
         pub.nav.set(dcx, dcz, pub.wcDoor.isOpen || pub.wcDoor.moving ? Area.WALK | Area.DOOR : 0);
+        const stallOpen = pub.stallDoor.isOpen || pub.stallDoor.moving;
+        for (const [x, z] of pub.stallCells) pub.nav.set(x, z, stallOpen ? Area.WALK | Area.DOOR : 0);
         if (s.ezoDrinkT > 0) {
           s.ezoDrinkT -= dt;
           if (s.ezoDrinkT <= 0) pub.ezo?.stopDrink();

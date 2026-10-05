@@ -71,6 +71,8 @@ export interface Pub {
   nav: NavGrid;
   /** The nav cell in the WC doorway (closed door = no way through). */
   wcDoorCell: [number, number];
+  /** The nav cells inside the WC stall (closed stall door = no way in). */
+  stallCells: Array<[number, number]>;
   glyph: Mesh;
   beerStream: Mesh;
   cellarHatch: Mesh;
@@ -631,6 +633,9 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   // the WC's strip along the shared wall touches the room's edge cells: only the doorway connects
   nav.fillRect(-6.5, -3.0, -6.0, 0.0, 0, true);
   nav.fillRect(-6.5, -1.5, -5.5, -1.0, Area.WALK | Area.DOOR);
+  // the stall: in only through its door (see stallCells), never through its side wall
+  nav.fillRect(-8.0, -0.5, -7.5, 0.0, 0, true);
+  nav.fillRect(-9.0, -0.5, -8.0, 0.0, Area.WALK | Area.DOOR, true);
   const block = (x0: number, z0: number, x1: number, z1: number) => nav.fillRect(x0, z0, x1, z1, 0, true);
   block(2.4, 2.6, 3.6, 3.9);
   block(-5.0, 1.9, -3.6, 3.3);
@@ -638,6 +643,7 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   block(-1.9, -1.0, -0.5, 0.0);
   block(1.9, -1.3, 3.3, 0.1);
   block(-5.8, 3.4, -4.7, 4.3);
+  block(-3.4, 3.4, -2.4, 4.3); // chalkboard
   block(5.3, -4.4, 5.9, 1.3);
 
   return {
@@ -676,6 +682,7 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
     vierkaSpot,
     nav,
     wcDoorCell: nav.toCell(-6.25, -1.25),
+    stallCells: [nav.toCell(-8.75, -0.25), nav.toCell(-8.25, -0.25)],
     glyph,
     beerStream,
     cellarHatch,
