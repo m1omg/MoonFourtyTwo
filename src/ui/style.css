@@ -643,3 +643,13 @@ body {
   margin: 0;
   padding: 0.3rem 0.6rem;
 }
+
+.save-row label {
+  display: flex;
+  flex-direction: column;
+}
+
+.save-detail {
+  font-size: 0.8em;
+  opacity: 0.65;
+}

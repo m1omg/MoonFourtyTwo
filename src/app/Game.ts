@@ -50,7 +50,16 @@ import { MaterialLib } from '../world/materials.ts';
 import type { RealityInstance, RealityModule } from '../world/Reality.ts';
 import { REALITIES, REALITY_ORDER, realityExists } from '../realities/registry.ts';
 import { loadSettings, saveSettings, type Settings } from '../save/Settings.ts';
-import { clearSave, loadSave, writeSave, type SaveData } from '../save/SaveGame.ts';
+import {
+  clearSave,
+  loadBook,
+  loadSave,
+  saveToSlot,
+  setCurrentSave,
+  writeSave,
+  type SaveData,
+} from '../save/SaveGame.ts';
+import { wallClockMs } from '../core/time.ts';
 import type { DebugOptions } from './debug.ts';
 
 const _look = new Vector3();
@@ -294,6 +303,8 @@ export class Game {
 
   async titleScreen(): Promise<void> {
     this.mode = 'title';
+    // leaving a game from the pause menu must not leave the next one paused
+    this.loop.paused = false;
     this.ui.setHudVisible(false);
     this.touch?.setVisible(false);
     this.input.exitPointerLock();
@@ -304,16 +315,22 @@ export class Game {
     window.addEventListener('keydown', wake, { once: true });
     const theme = new MusicBox(this.audio);
     theme.play({ ...TUNES.esteJedno!, voice: 'musicbox', rate: 0.78 }, undefined, 0.2);
-    const choice = await this.ui.showTitle(!!save, this.openSettings);
+    let picked: SaveData | null = null;
+    let choice: 'new' | 'continue' | 'load';
+    do {
+      const book = loadBook();
+      const canLoad = book.history.length > 0 || book.slots.some(Boolean);
+      choice = await this.ui.showTitle(!!save, this.openSettings, canLoad);
+      if (choice === 'load') picked = await this.ui.showSaves(loadBook(), 'load');
+    } while (choice === 'load' && !picked);
     this.goFullscreen();
     theme.stop();
     window.removeEventListener('pointerdown', wake);
     window.removeEventListener('keydown', wake);
     this.audio.unlock();
-    if (choice === 'continue' && save) {
-      this.restoreSave(save);
-      await this.startReality(save.reality, save.checkpoint, true);
-    } else {
+    if (picked) await this.loadGame(picked);
+    else if (choice === 'continue' && save) await this.loadGame(save);
+    else {
       clearSave();
       this.flags.load({});
       this.hasLight = false;
@@ -325,6 +342,14 @@ export class Game {
       this.playSeconds = 0;
       await this.startReality(REALITY_ORDER[0]!, undefined, false);
     }
+  }
+
+  /** Continues a saved game (the current one or one picked from the list of saves). */
+  private async loadGame(s: SaveData): Promise<void> {
+    if (!this.debug.test || this.debug.saves) setCurrentSave(s);
+    this.restoreSave(s);
+    this.loop.paused = false;
+    await this.startReality(s.reality, s.checkpoint, true);
   }
 
   private restoreSave(s: SaveData): void {
@@ -349,11 +374,30 @@ export class Game {
     this.input.setEnabled(false);
     this.input.exitPointerLock();
     const found = this.mats.length ? `${t('pauseMats')}: ${this.mats.length} / ${MAT_COUNT}` : undefined;
-    const r = await this.ui.showPause(this.openSettings, found);
+    let r: 'resume' | 'title' | 'save' | 'load';
+    let picked: SaveData | null = null;
+    for (;;) {
+      r = await this.ui.showPause(this.openSettings, found);
+      if (r === 'save') {
+        const slot = await this.ui.showSaves(loadBook(), 'save');
+        if (slot !== null && saveToSlot(slot)) this.ui.toast(t('saveDone'));
+        continue;
+      }
+      if (r === 'load') {
+        picked = await this.ui.showSaves(loadBook(), 'load');
+        if (!picked) continue;
+      }
+      break;
+    }
     this.pauseOpen = false;
     if (r === 'title') {
       this.disposeReality();
       await this.titleScreen();
+      return;
+    }
+    if (picked) {
+      this.disposeReality();
+      await this.loadGame(picked);
       return;
     }
     this.loop.paused = false;
@@ -544,6 +588,8 @@ export class Game {
       mats: [...this.mats],
       tallies: this.tallies,
       playSeconds: this.playSeconds,
+      savedAt: wallClockMs(),
+      title: this.realityModule?.title,
     });
   }
 
@@ -570,7 +616,12 @@ export class Game {
     this.status.reset(Math.min(1, this.status.intox.bac));
     this.status.buffs.add('hangover', 60);
     await this.startReality(save?.reality ?? this.realityId, save?.checkpoint ?? this.checkpoint, true);
+    // threats hold still for a moment after a blackout: no checkpoint can catch you again at once
+    this.respawnGrace = 4;
   }
+
+  /** Seconds after an okno during which threats do not move. */
+  private respawnGrace = 0;
 
   // ───────────────────────────── scripting helpers ─────────────────────────────
 
@@ -726,7 +777,8 @@ export class Game {
     ctx.time = this.clock.time;
     ctx.dt = dt;
     ctx.noises = this.noises;
-    for (const e of this.entities) e.tick(dt, ctx);
+    if (this.respawnGrace > 0) this.respawnGrace -= dt;
+    else for (const e of this.entities) e.tick(dt, ctx);
     this.noises = [];
 
     // status

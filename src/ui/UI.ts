@@ -1,6 +1,7 @@
 import { el, wait } from './dom.ts';
 import { t, sk } from '../i18n/sk.ts';
 import type { Settings } from '../save/Settings.ts';
+import type { SaveBook, SaveData } from '../save/SaveGame.ts';
 import { BINDABLE, DEFAULT_BINDS, type Bindable } from '../input/InputManager.ts';
 import type { ItemId } from '../sim/items/items.data.ts';
 import { ITEMS } from '../sim/items/items.data.ts';
@@ -102,12 +103,18 @@ export class UI {
     });
   }
 
-  showTitle(canContinue: boolean, onSettings: () => Promise<void>): Promise<'new' | 'continue'> {
+  showTitle(
+    canContinue: boolean,
+    onSettings: () => Promise<void>,
+    canLoad = canContinue,
+  ): Promise<'new' | 'continue' | 'load'> {
     return new Promise((resolve) => {
       const render = () => {
         const bNew = el('button', { type: 'button' }, t('menuNew'));
         const bCont = el('button', { type: 'button' }, t('menuContinue'));
         if (!canContinue) bCont.setAttribute('disabled', '');
+        const bLoad = el('button', { type: 'button' }, t('menuLoad'));
+        if (!canLoad) bLoad.setAttribute('disabled', '');
         const bSet = el('button', { type: 'button' }, t('menuSettings'));
         const bAbout = el('button', { type: 'button' }, t('menuAbout'));
         this.screen(
@@ -118,9 +125,14 @@ export class UI {
             el('h1', { class: 'title' }, t('gameTitle')),
             el('div', { class: 'tagline' }, t('tagline')),
           ),
-          el('div', { class: 'menu' }, bCont, bNew, bSet, bAbout),
+          el('div', { class: 'menu' }, bCont, bNew, bLoad, bSet, bAbout),
         );
         (canContinue ? bCont : bNew).focus();
+        bLoad.addEventListener('click', () => {
+          if (!canLoad) return;
+          this.clearScreens();
+          resolve('load');
+        });
         bNew.addEventListener('click', () => {
           this.clearScreens();
           resolve('new');
@@ -159,10 +171,12 @@ export class UI {
     });
   }
 
-  showPause(onSettings: () => Promise<void>, info?: string): Promise<'resume' | 'title'> {
+  showPause(onSettings: () => Promise<void>, info?: string): Promise<'resume' | 'title' | 'save' | 'load'> {
     return new Promise((resolve) => {
       const render = () => {
         const bRes = el('button', { type: 'button' }, t('menuResume'));
+        const bSave = el('button', { type: 'button' }, t('menuSave'));
+        const bLoad = el('button', { type: 'button' }, t('menuLoad'));
         const bSet = el('button', { type: 'button' }, t('menuSettings'));
         const bTitle = el('button', { type: 'button' }, t('menuQuitToTitle'));
         this.screen(
@@ -173,9 +187,18 @@ export class UI {
             el('h1', { class: 'title' }, t('pauseTitle')),
             info ? el('p', { class: 'tagline' }, info) : null,
           ),
-          el('div', { class: 'menu' }, bRes, bSet, bTitle),
+          el('div', { class: 'menu' }, bRes, bSave, bLoad, bSet, bTitle),
         );
         bRes.focus();
+        for (const [b, r] of [
+          [bSave, 'save'],
+          [bLoad, 'load'],
+        ] as const) {
+          b.addEventListener('click', () => {
+            this.clearScreens();
+            resolve(r);
+          });
+        }
         bRes.addEventListener('click', () => {
           this.clearScreens();
           resolve('resume');
@@ -187,6 +210,71 @@ export class UI {
         });
       };
       render();
+    });
+  }
+
+  /**
+   * The list of saves. To load: the recent checkpoints and the player's slots, resolves with the
+   * picked save. To save: the slots, resolves with the slot to keep the last checkpoint in.
+   * Null = back.
+   */
+  showSaves(book: SaveBook, mode: 'load'): Promise<SaveData | null>;
+  showSaves(book: SaveBook, mode: 'save'): Promise<number | null>;
+  showSaves(book: SaveBook, mode: 'load' | 'save'): Promise<SaveData | number | null> {
+    return new Promise((resolve) => {
+      const done = (v: SaveData | number | null) => {
+        this.clearScreens();
+        resolve(v);
+      };
+      const row = (label: string, detail: string, action?: string, onClick?: () => void) => {
+        const b = action ? el('button', { class: 'btn key', type: 'button' }, action) : null;
+        if (b && onClick) b.addEventListener('click', onClick);
+        return el(
+          'div',
+          { class: 'setting save-row' },
+          el('label', {}, label, el('span', { class: 'save-detail' }, detail)),
+          b ?? el('span'),
+        );
+      };
+      const rows: HTMLElement[] = [];
+      if (mode === 'load') {
+        rows.push(el('h3', {}, t('savesRecent')));
+        for (const s of book.history)
+          rows.push(row(saveTitle(s), saveDetail(s), t('saveLoad'), () => done(s)));
+        if (!book.history.length) rows.push(el('p', { class: 'keys-hint' }, t('savesNone')));
+      } else rows.push(el('p', { class: 'keys-hint' }, t('saveHint')));
+      rows.push(el('h3', {}, t('savesSlots')));
+      book.slots.forEach((s, i) => {
+        const name = `${t('saveSlot')} ${i + 1}`;
+        if (mode === 'load')
+          rows.push(
+            s
+              ? row(`${name}: ${saveTitle(s)}`, saveDetail(s), t('saveLoad'), () => done(s))
+              : row(name, t('saveEmpty')),
+          );
+        else
+          rows.push(
+            row(
+              s ? `${name}: ${saveTitle(s)}` : name,
+              s ? saveDetail(s) : t('saveEmpty'),
+              s ? t('saveOverwrite') : t('saveHere'),
+              () => done(i),
+            ),
+          );
+      });
+      const back = el('button', { class: 'btn', type: 'button' }, t('menuBack'));
+      back.addEventListener('click', () => done(null));
+      this.screen(
+        'dim',
+        el(
+          'div',
+          { class: 'panel' },
+          el('h2', {}, t(mode === 'load' ? 'menuLoad' : 'menuSave')),
+          ...rows,
+          back,
+        ),
+      );
+      back.focus();
     });
   }
 
@@ -574,4 +662,21 @@ function keyName(code: string): string {
   };
   if (code === 'BracketLeft' || code === 'BracketRight') return names[code]!;
   return (names[base] ?? code) + side;
+}
+
+function saveTitle(s: SaveData): string {
+  return s.title ?? t('saveUnknown');
+}
+
+/** „hrané 12 min · 4. 10. 21:14" */
+function saveDetail(s: SaveData): string {
+  const played = `${t('savePlayed')} ${Math.max(1, Math.round(s.playSeconds / 60))} min`;
+  if (!s.savedAt) return played;
+  const when = new Date(s.savedAt).toLocaleString('sk-SK', {
+    day: 'numeric',
+    month: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `${played} · ${when}`;
 }
