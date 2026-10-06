@@ -112,8 +112,12 @@ export class AudioSystem {
     this.reverbIn.connect(this.reverb).connect(this.reverbOut).connect(this.master);
     this.setReverb(1.6, 0.35);
     this.applyVolumes();
+    // a hidden tab is a paused game: silent until the player comes back
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && this.ctx && this.ctx.state !== 'running') void this.ctx.resume();
+      if (!this.ctx) return;
+      if (document.hidden) {
+        if (this.ctx.state === 'running') void this.ctx.suspend();
+      } else if (this.ctx.state !== 'running') void this.ctx.resume();
     });
   }
 
@@ -164,6 +168,15 @@ export class AudioSystem {
       this.buffers.set(url, p);
     }
     return p;
+  }
+
+  /** The first of several encodings of one sound that this browser can decode. */
+  async loadFirst(urls: readonly string[]): Promise<AudioBuffer | null> {
+    for (const url of urls) {
+      const b = await this.load(url);
+      if (b) return b;
+    }
+    return null;
   }
 
   private decode(ab: ArrayBuffer): Promise<AudioBuffer> {

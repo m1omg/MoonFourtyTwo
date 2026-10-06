@@ -792,6 +792,8 @@ const reality: RealityModule = {
             }
             st.solved = true;
             game.flags.put('cellar.solved');
+            // keep the solved puzzle: a blackout on the way to the pipe wakes you in the boiler room
+            game.saveCheckpoint('boiler');
             game.synth.clank(gate.position, 1.2);
             game.synth.hiss(gate.position, 2.5, 0.2);
             stoppers.push(

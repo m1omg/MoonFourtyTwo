@@ -428,6 +428,8 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
   const doorTex = scope.add(roomDoorTexture());
   const wardrobeAt: Matrix4[] = [];
   const glassAt: Array<{ x: number; y: number; z: number; fill: number; shot: boolean }> = [];
+  /** Furniture footprints the chambermaid must walk around (x0, z0, x1, z1), cut from the nav below. */
+  const navBlocks: Array<[number, number, number, number]> = [];
   ERAS.forEach((era, n) => {
     const side: -1 | 1 = n % 2 === 0 ? -1 : 1;
     const i = Math.floor(n / 2);
@@ -502,6 +504,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
         new Matrix4().makeRotationY(side < 0 ? Math.PI / 2 : -Math.PI / 2).setPosition(wx, 0, wz),
       );
       b.box([wx - 0.32, 0, wz - 0.62], [wx + 0.32, 2.0, wz + 0.62], null);
+      navBlocks.push([wx - 0.32, wz - 0.62, wx + 0.32, wz + 0.62]);
       spots.push({
         id: `${era}:wardrobe`,
         kind: 'wardrobe',
@@ -517,6 +520,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
       if (bed && era === '1e14') tintAll(bed, mossMat.material);
       if (bed && era === 'tallies') tintAll(bed, tallyMat.material);
       b.box([bx - 0.46, 0.38, bz - 1.0], [bx + 0.46, 0.55, bz + 1.0], null);
+      navBlocks.push([bx - 0.46, bz - 1.0, bx + 0.46, bz + 1.0]);
       spots.push({
         id: `${era}:bed`,
         kind: 'bed',
@@ -591,6 +595,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
         const cx0 = Math.min(outer - side * 0.05, outer - side * 0.6);
         const cx1 = Math.max(outer - side * 0.05, outer - side * 0.6);
         b.box([cx0, 0, z1 - 3.2], [cx1, 0.9, z1 - 2.0], counterWood);
+        navBlocks.push([cx0, z1 - 3.2, cx1, z1 - 2.0]);
         fixture.color = 0xffc890;
         break;
       }
@@ -767,7 +772,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
     watcher.root.position.set(wroom.table.x, -0.5 + 0.02, wroom.table.z - 0.7);
     watcher.root.rotation.y = 0;
     scene.add(watcher.root);
-    watcher.holdMug(tw.mug(0.6));
+    watcher.holdOnTable(tw.mug(0.6), 0.762, 0.15);
   }
   const jg = props.gltf('jano');
   let me: Character | null = null;
@@ -975,6 +980,21 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
     nav.fillRect(r.x0 + 0.4, r.z0 + 0.4, r.x1 - 0.4, r.z1 - 0.4, Area.WALK);
     nav.fillRect(r.door.x - 0.7, r.door.z - 0.35, r.door.x + 0.7, r.door.z + 0.35, Area.WALK);
   }
+  // what the rectangles above do not know: she walked through these
+  const cut = (x0: number, z0: number, x1: number, z1: number) => nav.fillRect(x0, z0, x1, z1, 0, true);
+  // the lobby's side walls, all but their wide openings to the restaurant and the dance hall
+  for (const x of [LOBBY.x0, LOBBY.x1]) {
+    cut(x - 0.5, LOBBY.z0, x + 0.5, LOBBY.z1);
+    nav.fillRect(x - 0.5, 4.75, x + 0.5, 9.25, Area.WALK);
+  }
+  cut(2.8, 1.8, 8.7, 2.9); // reception counter
+  cut(-5.0, 0, -4.0, 0.9); // grandfather clock
+  cut(-7.4, 10.8, -4.6, 12.3); // lounge: sofa
+  cut(-7.2, 8.4, -4.8, 10.4); // low table
+  for (const x of [-8.2, -3.8]) cut(x - 0.5, 8.1, x + 0.5, 9.1); // lounge chairs
+  for (const [x, z] of tables) cut(x - 0.6, z - 0.6, x + 0.6, z + 0.6);
+  for (const r of rooms) cut(r.table.x - 0.7, r.table.z - 0.45, r.table.x + 0.7, r.table.z + 0.45);
+  for (const [x0, z0, x1, z1] of navBlocks) cut(x0, z0, x1, z1);
   const patrol = [
     new Vector3(0, 0, -2),
     new Vector3(0, 0, -12),

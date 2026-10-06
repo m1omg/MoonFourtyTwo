@@ -131,7 +131,12 @@ const reality: RealityModule = {
     if (st.skips >= SKIPS) openPath(false);
     const checkpointHere = () => game.saveCheckpoint(F('head') ? 'head' : F('bench') ? 'bench' : 'pier');
     const startEon = () => {
-      if (st.skipT >= 0) return;
+      if (st.skipT >= 0) {
+        // drunk while an eon is still going by: it would be lost, and there are only as many
+        // shots as eons to skip. It stays in your hand.
+        game.inventory.add('cierne', 1);
+        return;
+      }
       st.skipT = 0;
       st.phaseFrom = st.phase;
       st.wheelsFrom = st.wheels;

@@ -170,6 +170,24 @@ export function instanceModelChunked(
   return out;
 }
 
+/** Removes the instances standing within `radius` of a point on the ground plan (e.g. a glass picked up). */
+export function hideInstancesNear(meshes: InstancedMesh[], x: number, z: number, radius: number): void {
+  const zero = new Matrix4().makeScale(0, 0, 0);
+  for (const im of meshes) {
+    let changed = false;
+    // instances of a chunk with a far level are placed relative to the chunk's LOD
+    im.updateWorldMatrix(true, false);
+    for (let i = 0; i < im.count; i++) {
+      im.getMatrixAt(i, _m);
+      _p.setFromMatrixPosition(_m).applyMatrix4(im.matrixWorld);
+      if (Math.hypot(_p.x - x, _p.z - z) > radius) continue;
+      im.setMatrixAt(i, zero);
+      changed = true;
+    }
+    if (changed) im.instanceMatrix.needsUpdate = true;
+  }
+}
+
 function instanceParts(
   parts: Part[],
   xforms: InstanceXform[],

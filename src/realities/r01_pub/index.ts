@@ -12,8 +12,11 @@ import { Watcher } from '../../sim/ai/behaviors/Watcher.ts';
 import { MusicBox, TUNES } from '../../audio/procedural/musicbox.ts';
 import { BAC_DRUNK } from '../../sim/status/Intoxication.ts';
 import { clamp } from '../../core/damp.ts';
-import { Cancelled } from '../../sim/narrative/ScriptRunner.ts';
+import { Cancelled, runScript } from '../../sim/narrative/ScriptRunner.ts';
 import { placeBeerMat } from '../../world/objects/beermats.ts';
+import { setMugFill } from '../../world/objects/tableware.ts';
+import { Area } from '../../sim/ai/nav/NavGrid.ts';
+import type { Group, MeshStandardMaterial } from 'three';
 
 /** Shows a line from the pub script (voice clip if recorded) and animates the speaker. */
 async function line(game: Game, pub: Pub, id: string): Promise<void> {
@@ -30,6 +33,8 @@ async function line(game: Game, pub: Pub, id: string): Promise<void> {
 }
 
 const TV_LAYER = 3;
+/** Yaw that looks from Ežo's table across the room to the regulars' table. */
+const FACE_REGULARS = Math.atan2(-(-4.3 - 2.2), -(2.6 - 2.3));
 
 const reality: RealityModule = {
   id: 'r1',
@@ -56,11 +61,18 @@ const reality: RealityModule = {
       ordered: false,
       glyph: 0,
       glyphShown: game.flags.has('pub.glyph'),
-      lastRoundAt: 0,
+      // the clock keeps running across realities and respawns: time stamps start from now
+      lastRoundAt: game.clock.time,
+      /** A round Ežo ordered that still waits on the counter. */
+      counterRound: null as ItemId | null,
+      /** How much is left in Ežo's mug. */
+      ezoFill: 0.6,
+      /** When Ežo may next repeat himself in the frozen pub (not every breath). */
+      r2LineAt: 0,
       inWc: false,
       swapped: false,
       lightsOff: false,
-      flickerAt: 8,
+      flickerAt: game.clock.time + 8,
       faceTurn: 0,
       lastYaw: 0,
       lastYawT: 0,
@@ -69,10 +81,6 @@ const reality: RealityModule = {
       wcScene: 0,
       wcTimer: 0,
       r2Talked: game.flags.has('pub.r2talk'),
-      /** Back in the WC after an okno: the two regulars wait until you are out of it. */
-      wakeWhenOut: false,
-      wakeAt: 0,
-      r2Waiting: false,
       slotSpin: 0,
       slotReels: ['7', 'ČE', 'ZV'] as string[],
       jukebox: -1,
@@ -80,6 +88,7 @@ const reality: RealityModule = {
       keys: game.flags.has('pub.keys'),
     };
     pub.ourMat.draw(s.tallies);
+    if (s.keys && pub.vierkaKeys) pub.vierkaKeys.visible = false;
 
     const cam = game.renderer.camera;
     const eyeVec = new Vector3();
@@ -138,6 +147,38 @@ const reality: RealityModule = {
       enabled: () => !s.busy && s.phase === 'r1',
       onUse: () => void (hasRound() ? toast() : talkMenu()),
     });
+    // the frozen pub: he only talks once you sit with him; afterwards he reminds you what to do
+    I.add({
+      id: 'ezo2',
+      pos: new Vector3(3.0, 1.15, 3.95),
+      radius: 0.4,
+      range: 2.6,
+      prompt: () => (s.r2Talked ? 'Porozprávať sa' : 'Sadnúť si k Ežovi'),
+      enabled: () => s.phase === 'r2' && !s.seated && (!s.busy || !s.r2Talked),
+      onUse: () => {
+        if (!s.r2Talked) {
+          sitDown();
+          void r2Talk();
+        } else void solo(() => say(s.keys ? 'e_r2_6' : 'e_r2_keys'));
+      },
+    });
+    I.add({
+      id: 'roundPickup',
+      pos: new Vector3(-0.88, 1.2, -2.8),
+      radius: 0.3,
+      range: 2.4,
+      prompt: 'Vziať rundu',
+      enabled: () => s.phase === 'r1' && s.counterRound !== null,
+      onUse: () => {
+        const item = s.counterRound;
+        if (!item) return;
+        s.counterRound = null;
+        game.inventory.add(item, 2);
+        roundItem = item;
+        game.synth.clink(new Vector3(-0.88, 1.15, -2.8), 0.4);
+        game.ui.toast(`${ITEMS[item].name} ×2 — odnes to k stolu`);
+      },
+    });
     I.add({
       id: 'vierka',
       pos: pub.vierkaSpot.clone().add(new Vector3(0, 1.45, 0)),
@@ -189,7 +230,9 @@ const reality: RealityModule = {
       range: 5,
       prompt: 'Pozrieť na hodiny',
       onUse: () =>
-        void solo(() => say(s.phase === 'r2' ? 't_clock2' : pub.clock.backTicks > 0 ? 't_clock' : 't_cold')),
+        void solo(() =>
+          say(s.phase === 'r2' ? 't_clock2' : pub.clock.backTicks > 0 ? 't_clock' : 't_clock0'),
+        ),
     });
     I.add({
       id: 'tv',
@@ -308,7 +351,8 @@ const reality: RealityModule = {
     // frozen-pub interactions
     I.add({
       id: 'keys',
-      // she stands frozen behind the bar: looking at her is enough, you reach over the counter
+      // the keys are in her apron, below the counter's edge: she stands frozen behind the bar,
+      // so looking at her is enough (you reach over the counter)
       pos: pub.vierkaSpot.clone().add(new Vector3(0, 1.15, 0.1)),
       radius: 0.5,
       range: 3.0,
@@ -318,6 +362,7 @@ const reality: RealityModule = {
       onUse: () => {
         s.keys = true;
         game.flags.put('pub.keys');
+        if (pub.vierkaKeys) pub.vierkaKeys.visible = false;
         game.synth.click(pub.vierkaSpot, 3200, 0.12);
         void solo(() => say('t_keys'));
       },
@@ -345,6 +390,16 @@ const reality: RealityModule = {
     // ───────── helpers ─────────
     let roundItem: ItemId | null = null;
     const hasRound = () => roundItem !== null && game.inventory.count(roundItem) > 0;
+    /** Like solo, but lets a line in progress finish first instead of dropping `fn`. */
+    async function soloWhenFree(fn: () => Promise<void>): Promise<void> {
+      try {
+        await game.clock.until(() => !s.busy, 15);
+      } catch (e) {
+        if (!(e instanceof Cancelled)) console.error(e);
+        return;
+      }
+      await solo(fn);
+    }
     async function solo(fn: () => Promise<void>): Promise<void> {
       if (s.busy) return;
       s.busy = true;
@@ -358,8 +413,13 @@ const reality: RealityModule = {
     }
 
     async function onSat(): Promise<void> {
-      if (!s.ordered && game.flags.has('pub.intro') && !hasRound()) await solo(() => say('e_wait'));
-      else if (hasRound()) await toast();
+      // sitting down while Ežo is mid-sentence: he finishes it, then turns to you
+      if (s.busy) await soloWhenFree(async () => undefined);
+      if (!s.seated) return;
+      if (hasRound()) await toast();
+      else if (s.glyphShown && !s.swapped) await solo(() => say('e_nudge'));
+      else if (s.counterRound) await solo(() => say('e_fetch'));
+      else if (!s.ordered && game.flags.has('pub.intro')) await solo(() => say('e_wait'));
     }
 
     async function order(): Promise<void> {
@@ -399,7 +459,7 @@ const reality: RealityModule = {
           s.tallies++;
           pub.ourMat.draw(s.tallies);
           game.ui.toast(`${ITEMS[item].name} ×2 — odnes to k stolu`);
-          s.faceTurn = 1;
+          if (s.faceTurn === 0) s.faceTurn = 1;
         }
         if (game.status.intox.bac > 1.6) await say('v_closing');
       });
@@ -409,7 +469,10 @@ const reality: RealityModule = {
       if (!roundItem || !hasRound()) return;
       await solo(async () => {
         const item = roundItem!;
-        if (item === 'borovicka' && !game.flags.has('pub.borLine')) {
+        // only one glass left: you already drank yours, the last one is Ežo's
+        const both = game.inventory.count(item) >= 2;
+        if (!both) await say('e_ahead');
+        else if (item === 'borovicka' && !game.flags.has('pub.borLine')) {
           game.flags.put('pub.borLine');
           await say('e_bor1');
           await say('e_bor2');
@@ -424,22 +487,46 @@ const reality: RealityModule = {
         // clink, both drink
         game.synth.clink(new Vector3(3.0, 1.0, 3.3), 1);
         game.fx.shake = 0.15;
-        pub.ezo?.startDrink();
-        s.ezoDrinkT = 2.2;
+        if (item === 'pivo') s.ezoFill = 0.85; // his fresh beer from the round
+        ezoSip();
         game.inventory.take(item); // Ežo's glass
-        game.consumeNow(item);
-        if (game.inventory.count(item) > 0) game.inventory.take(item);
+        if (both) {
+          game.inventory.take(item);
+          game.consumeNow(item);
+        }
         roundItem = null;
         s.rounds++;
         game.flags.put('pub.rounds', s.rounds);
         s.lastRoundAt = game.clock.time;
         game.tallies++;
         game.saveCheckpoint('table');
+        // the evening moves on: a new thought from Ežo after each round (once each)
+        const next = `e_round${s.rounds}`;
+        if (L[next] && !game.flags.has(`pub.${next}`)) {
+          game.flags.put(`pub.${next}`);
+          await game.clock.wait(1.2);
+          await say(next);
+        }
       });
+    }
+
+    /** Ežo takes a sip: the arm comes up and his mug goes down a little. */
+    function ezoSip(): void {
+      pub.ezo?.startDrink();
+      s.ezoDrinkT = 2.2;
+      s.ezoFill = Math.max(0.12, s.ezoFill - 0.22);
     }
 
     async function talkMenu(): Promise<void> {
       await solo(async () => {
+        if (s.glyphShown && !s.swapped) {
+          await say('e_nudge');
+          return;
+        }
+        if (s.counterRound) {
+          await say('e_fetch');
+          return;
+        }
         await say('e_talk');
         const opts = [
           'Ako bolo v práci?',
@@ -495,8 +582,6 @@ const reality: RealityModule = {
           return;
         }
         s.jukebox = pick;
-        const url = pick === 0 ? 'assets/music/este_jedno.mp3' : 'assets/music/dychovka.mp3';
-        void url;
         music.play(pick === 0 ? TUNES.esteJedno! : TUNES.dychovka!, new Vector3(5.4, 1.0, 0.8), 0.4);
       });
     }
@@ -578,7 +663,7 @@ const reality: RealityModule = {
     // the feed redraws the whole pub: 12 times a second, 6 on the low preset
     const tvInterval = game.renderer.profile.tier === 'low' ? 1 / 6 : 1 / 12;
 
-    function swapToFrozen(): void {
+    function swapToFrozen(save = true): void {
       if (s.swapped) return;
       s.swapped = true;
       // the frozen pub has its own mat, on the bar
@@ -604,23 +689,33 @@ const reality: RealityModule = {
         game.synth.loopNoise({ kind: 'white', type: 'bandpass', freq: 7200, q: 8, volume: 0.012 }),
       );
       game.grade = { ...game.grade, saturation: 0.55, tint: [0.92, 0.97, 1.05], gain: [0.95, 1.0, 1.06] };
-      game.saveCheckpoint('frozen');
+      // the round on the counter froze with everything else
+      s.counterRound = null;
+      if (save) game.saveCheckpoint('frozen');
+    }
+
+    /**
+     * After a blackout in the frozen pub the regulars wait at their table a moment: you wake by
+     * Ežo with them in sight, and the lights hold steady until you have found your feet.
+     */
+    function wakeWatchersLater(seconds: number): void {
+      for (const w of watchers) {
+        w.awake = false;
+        w.place(w.home.x, 0, w.home.z, w.yaw);
+      }
+      s.lightsOff = false;
+      s.flickerAt = game.clock.time + seconds + 6;
+      runScript(async () => {
+        await game.clock.wait(seconds);
+        if (s.phase === 'r2' && s.r2Talked) for (const w of watchers) w.awake = true;
+      });
     }
 
     async function r2Talk(): Promise<void> {
-      if (s.r2Talked || s.r2Waiting) return;
-      // he finishes the sentence he is in first: it must not swallow the explanation
-      s.r2Waiting = true;
-      try {
-        await game.clock.until(() => !s.busy);
-      } catch (e) {
-        if (!(e instanceof Cancelled)) console.error(e);
-        return;
-      } finally {
-        s.r2Waiting = false;
-      }
-      if (!s.seated || s.r2Talked) return;
-      await solo(async () => {
+      if (s.r2Talked) return;
+      // he may be mid-sentence (he repeats himself until you sit): let him finish, never drop this
+      await soloWhenFree(async () => {
+        if (s.r2Talked || !s.seated) return;
         await say('e_r2_2');
         await say('e_r2_3');
         await say('e_r2_4');
@@ -629,7 +724,8 @@ const reality: RealityModule = {
         game.flags.put('pub.r2talk');
         for (const w of watchers) w.awake = true;
         s.flickerAt = game.clock.time + 5;
-        game.saveCheckpoint('frozen');
+        // a blackout from here on wakes you by Ežo's table, not locked in the WC
+        game.saveCheckpoint('frozenTable');
       });
     }
 
@@ -669,15 +765,24 @@ const reality: RealityModule = {
       checkpoints: {
         table: { pos: pub.playerSeat.pos.clone(), yaw: pub.playerSeat.yaw, pitch: -0.12 },
         frozen: { pos: new Vector3(-7.3, 0, -1.6), yaw: -Math.PI / 2 },
+        // beside Ežo's table, facing the regulars' table across the room
+        frozenTable: { pos: new Vector3(2.2, 0, 2.3), yaw: FACE_REGULARS },
       },
       start(cp) {
         // Ežo's beer mats (collectibles): one on the round table by the dartboard
         placeBeerMat(game, scope, 'r1', new Vector3(2.75, 1.6, -0.45));
-        if (cp === 'frozen') {
-          s.inWc = true;
-          swapToFrozen();
-          pub.wcDoor.close();
-          s.wakeWhenOut = s.r2Talked;
+        if (cp === 'frozen' || cp === 'frozenTable') {
+          // saves from before the table checkpoint woke you in the WC even after Ežo's talk
+          const atTable = cp === 'frozenTable' || s.r2Talked;
+          s.inWc = !atTable;
+          swapToFrozen(false);
+          if (atTable) {
+            const t = instance.checkpoints.frozenTable!;
+            game.player.teleport(t.pos, t.yaw);
+            game.rig.setOrientation(t.yaw, 0);
+            if (cp !== 'frozenTable') game.saveCheckpoint('frozenTable');
+          } else pub.wcDoor.close();
+          if (s.r2Talked) wakeWatchersLater(3);
           return;
         }
         startAmbience();
@@ -689,22 +794,32 @@ const reality: RealityModule = {
               // the first beer of the evening: you arrive almost sober
               game.status.intox.set(Math.max(game.status.intox.bac, 0.3));
               game.inventory.add('pivo', 1);
-              game.inventory.select(0);
+              game.inventory.select(
+                Math.max(
+                  0,
+                  game.inventory.slots.findIndex((sl) => sl.item === 'pivo'),
+                ),
+              );
               await game.clock.wait(1.6);
               await say('e_intro1');
               pub.ezo?.laugh();
               await say('e_intro2');
               await say('e_intro3');
               game.synth.clink(new Vector3(3.0, 1.0, 3.2), 1);
-              pub.ezo?.startDrink();
-              s.ezoDrinkT = 2.4;
+              ezoSip();
               game.ui.toast(
                 game.touch ? 'Ťukni na „Piť"' : 'Stlač Q (alebo pravé tlačidlo myši) a napi sa',
                 4500,
               );
-              await game.clock.until(() => game.inventory.count('pivo') === 0, 25);
-              await game.clock.wait(1.0);
-              await say('e_intro4');
+              const drank = () => game.inventory.count('pivo') === 0;
+              await game.clock.until(drank, 25);
+              // still not drunk up: a nudge, then on with the evening either way
+              if (!drank()) {
+                await say('e_intro4');
+                await game.clock.until(drank, 40);
+              }
+              await game.clock.wait(2.4);
+              if (drank()) await say('e_intro5');
               await say('e_order1');
               await say('e_order2');
               game.flags.put('pub.intro');
@@ -723,6 +838,11 @@ const reality: RealityModule = {
         pub.frontDoor.step(dt);
         pub.wcDoor.step(dt);
         pub.stallDoor.step(dt);
+        // nobody walks through the closed WC door
+        const [dcx, dcz] = pub.wcDoorCell;
+        pub.nav.set(dcx, dcz, pub.wcDoor.isOpen || pub.wcDoor.moving ? Area.WALK | Area.DOOR : 0);
+        const stallOpen = pub.stallDoor.isOpen || pub.stallDoor.moving;
+        for (const [x, z] of pub.stallCells) pub.nav.set(x, z, stallOpen ? Area.WALK | Area.DOOR : 0);
         if (s.ezoDrinkT > 0) {
           s.ezoDrinkT -= dt;
           if (s.ezoDrinkT <= 0) pub.ezo?.stopDrink();
@@ -732,10 +852,13 @@ const reality: RealityModule = {
         const bac = game.status.intox.bac;
 
         if (s.phase === 'r1') {
-          // Ežo orders more rounds now and then
+          // Ežo orders more rounds now and then (Vierka pours them on the counter for you to
+          // fetch); once he has sent you to the WC he waits for you instead
           if (
             game.flags.has('pub.intro') &&
             !roundItem &&
+            !s.counterRound &&
+            !s.glyphShown &&
             !s.busy &&
             game.clock.time - s.lastRoundAt > 100 &&
             s.rounds >= 1
@@ -745,11 +868,10 @@ const reality: RealityModule = {
             void solo(async () => {
               await say('e_another');
               await say('v_round');
-              game.inventory.add(item, 2);
-              roundItem = item;
+              s.counterRound = item;
               s.tallies++;
               pub.ourMat.draw(s.tallies);
-              game.ui.toast(`${ITEMS[item].name} ×2 — Vierka to dala na pult`);
+              game.ui.toast(`${ITEMS[item].name} ×2 — Vierka to naliala na pult`);
             });
           }
           // hints that grow with alcohol and time
@@ -759,11 +881,13 @@ const reality: RealityModule = {
             s.figureShown = true;
             pub.windowFigure.visible = true;
           }
-          // glyph over the WC door
+          // glyph over the WC door: drunk enough, or enough rounds, or simply late enough.
+          // Not while Ežo is mid-sentence: his remark about it must not be skipped.
           const elapsed = game.playSeconds;
           if (
             !s.glyphShown &&
-            ((s.rounds >= 2 && bac >= BAC_DRUNK) || (s.rounds >= 1 && elapsed > 14 * 60))
+            !s.busy &&
+            ((s.rounds >= 2 && bac >= BAC_DRUNK) || s.rounds >= 4 || (s.rounds >= 1 && elapsed > 9 * 60))
           ) {
             s.glyphShown = true;
             game.flags.put('pub.glyph');
@@ -815,7 +939,10 @@ const reality: RealityModule = {
                 if (!o) continue;
                 const keep = o.rotation.y;
                 o.rotation.y = Math.atan2(p.x - o.position.x, p.z - o.position.z);
-                setTimeout(() => (o.rotation.y = keep), 650);
+                runScript(async () => {
+                  await game.clock.wait(0.65);
+                  if (s.phase === 'r1') o.rotation.y = keep;
+                });
               }
             }
             if (game.clock.time - s.lastYawT > 0.3) {
@@ -824,20 +951,17 @@ const reality: RealityModule = {
             }
           }
         } else {
-          // reality 2
-          if (!s.r2Talked && !s.busy && !s.seated) {
+          // reality 2: Ežo is stuck on one sentence until you come to him; close by he asks you to
+          // sit (now and then, not without a breath)
+          if (!s.r2Talked && !s.busy && !s.seated && game.clock.time > s.r2LineAt) {
             const d = p.distanceTo(pub.ezoSeat);
-            if (d < 2.2) void solo(() => say('e_r2_1'));
-            else if (game.rng.chance(dt * 0.25)) void solo(() => say('e_loop'));
-          }
-          if (s.wakeWhenOut && !(p.x < -6.15 && p.z < 0.2 && p.z > -3.2)) {
-            s.wakeWhenOut = false;
-            s.wakeAt = game.clock.time + 1.5;
-          }
-          if (s.wakeAt > 0 && game.clock.time >= s.wakeAt) {
-            s.wakeAt = 0;
-            for (const w of watchers) w.awake = true;
-            s.flickerAt = game.clock.time + 5;
+            if (d < 2.4) {
+              s.r2LineAt = game.clock.time + 7;
+              void solo(() => say('e_r2_1'));
+            } else if (game.rng.chance(dt * 0.25)) {
+              s.r2LineAt = game.clock.time + 6;
+              void solo(() => say('e_loop'));
+            }
           }
           if (s.r2Talked && game.clock.time > s.flickerAt) {
             s.lightsOff = !s.lightsOff;
@@ -864,11 +988,11 @@ const reality: RealityModule = {
           pub.vierka.lookTarget = game.player.pos.distanceTo(pub.vierkaSpot) < 6 ? eyeVec : null;
           pub.vierka.update(dt, t);
         }
-        // glyph fade
-        s.glyph +=
-          ((s.glyphShown && (game.status.layerVisionActive || s.phase === 'r2') ? 1 : 0) - s.glyph) *
-          Math.min(1, dt * 1.5);
+        // glyph fade: once Ežo has pointed it out it stays (drunk eyes just see it a bit stronger)
+        const glyphTarget = s.glyphShown ? (game.status.layerVisionActive || s.phase === 'r2' ? 1 : 0.7) : 0;
+        s.glyph += (glyphTarget - s.glyph) * Math.min(1, dt * 1.5);
         (pub.glyph.material as MeshBasicMaterial).opacity = s.glyph * (0.75 + 0.25 * Math.sin(t * 2.3));
+        updateGlasses();
         // slot machine reels
         if (s.slotSpin > 0) drawSlot(pub.slot, s.slotReels, t);
         if (s.jukebox >= 0) drawJukebox(pub.jukebox, s.jukebox, t);
@@ -920,6 +1044,32 @@ const reality: RealityModule = {
         return th;
       },
     };
+
+    /**
+     * What stands on the table and the counter follows what you have: your mug is full while you
+     * still have a beer and empty once you drank it, a shot glass appears for a round of shots,
+     * and a round Ežo ordered waits on the counter until you take it.
+     */
+    const SHOTS: ItemId[] = ['borovicka', 'slivovica', 'fernet'];
+    function tintShot(g: Group, item: ItemId): void {
+      const liquid = g.children[1] as { material?: MeshStandardMaterial } | undefined;
+      liquid?.material?.color.setHex(ITEMS[item].color);
+    }
+    function updateGlasses(): void {
+      const inv = game.inventory;
+      setMugFill(pub.playerMug, inv.count('pivo') > 0 ? 0.9 : 0);
+      const shot = s.phase === 'r1' ? SHOTS.find((it) => inv.count(it) > 0) : undefined;
+      pub.playerShot.visible = !!shot;
+      if (shot) tintShot(pub.playerShot, shot);
+      setMugFill(pub.ezoMug, s.ezoFill);
+      const waiting = s.counterRound;
+      const isShot = !!waiting && SHOTS.includes(waiting);
+      for (const g of pub.counterMugs) g.visible = !!waiting && !isShot;
+      for (const g of pub.counterShots) {
+        g.visible = isShot;
+        if (isShot) tintShot(g, waiting);
+      }
+    }
 
     async function homeEnding(): Promise<void> {
       if (game.flags.has('pub.home')) return;

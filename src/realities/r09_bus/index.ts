@@ -199,7 +199,10 @@ const reality: RealityModule = {
             if (st.stopAsked && st.flick === 'none') {
               st.phase = 'brake';
               st.phaseT = 0;
-            } else if (crossed(40)) line('e9_1');
+            } else if (t >= 40 && Math.floor((t - 40) / 30) > Math.floor((before - 40) / 30)) {
+              // he keeps reminding you (at 40 s, then every 30 s): the bus never stops on its own
+              line('e9_1');
+            }
           } else if (t >= DRIVE) {
             st.phase = 'brake';
             st.phaseT = 0;

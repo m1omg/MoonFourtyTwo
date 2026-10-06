@@ -17,7 +17,13 @@ import {
 import type { BufferGeometry } from 'three';
 import type { RealityModule } from '../../world/Reality.ts';
 import { Props } from '../../world/props.ts';
-import { farParts, instanceModelChunked, type InstanceXform } from '../../world/instancing.ts';
+import {
+  farParts,
+  hideInstancesNear,
+  instanceModelChunked,
+  type InstanceXform,
+} from '../../world/instancing.ts';
+import type { ItemId } from '../../sim/items/items.data.ts';
 import { Tableware } from '../../world/objects/tableware.ts';
 import { Character } from '../../npc/Character.ts';
 import { NavGrid, Area } from '../../sim/ai/nav/NavGrid.ts';
@@ -291,12 +297,13 @@ const reality: RealityModule = {
     scene.add(pillarMesh);
     // stale glasses (instanced: glass, beer, beer mat)
     const tw = new Tableware(scope);
+    let staleGlasses: InstancedMesh[] = [];
     {
       const proto = tw.mug(0.35);
       const matProto = tw.mat();
       proto.add(matProto);
       matProto.position.set(0, 0.002, 0);
-      instanceModelChunked(
+      staleGlasses = instanceModelChunked(
         proto,
         glassesAt.map((g) => ({ x: g.x, y: g.y, z: g.z, rotY: (g.x * 13.1 + g.z * 7.7) % 6.28 })),
         scene,
@@ -334,7 +341,7 @@ const reality: RealityModule = {
       ezo.pose = 'sit';
       ezo.root.position.set(ezoCell.x, -0.5, ezoCell.z - 0.75);
       scene.add(ezo.root);
-      ezo.holdMug(tw.mug(0.5));
+      ezo.holdOnTable(tw.mug(0.5), 0.834, 0.15);
     }
     props.place('WoodenTable_03', { pos: [ezoCell.x, 0, ezoCell.z], rotY: Math.PI / 2 });
     // chair rotY 0 faces +z: Ežo sits on the -z side facing the table, the player across from him
@@ -475,6 +482,13 @@ const reality: RealityModule = {
       }
       return best;
     };
+    /** The table a stale glass stands on. */
+    const tableOf = (g: Vector3) => {
+      let best = tableCells[0]!;
+      for (const c of tableCells)
+        if (Math.hypot(c.x - g.x, c.z - g.z) < Math.hypot(best.x - g.x, best.z - g.z)) best = c;
+      return best;
+    };
     game.interactions.add({
       id: 'sitAnywhere',
       pos: new Vector3(),
@@ -490,10 +504,16 @@ const reality: RealityModule = {
         const c = nearestTable();
         if (!c) return;
         let withDrink = c.glass;
-        if (!withDrink && game.inventory.has('staleBeer')) {
-          game.inventory.take('staleBeer');
+        // put down a glass you carry: a stale one first, a fresh beer if that is all you have
+        const own: ItemId | null = game.inventory.has('staleBeer')
+          ? 'staleBeer'
+          : game.inventory.has('pivo')
+            ? 'pivo'
+            : null;
+        if (!withDrink && own) {
+          game.inventory.take(own);
           c.glass = true;
-          const m = tw.mug(0.3);
+          const m = tw.mug(own === 'pivo' ? 0.85 : 0.3);
           m.position.set(c.x, 0.83, c.z);
           scene.add(m);
           withDrink = true;
@@ -521,6 +541,9 @@ const reality: RealityModule = {
         enabled: () => !st.seated && i % 3 === 0,
         onUse: () => {
           game.interactions.remove(`glass${i}`);
+          // the glass leaves the table with you (its mat too)
+          hideInstancesNear(staleGlasses, g.x, g.z, 0.1);
+          tableOf(g).glass = false;
           game.inventory.add('staleBeer', 1);
           if (!game.flags.has('hall.glassHint')) {
             game.flags.put('hall.glassHint');

@@ -9,13 +9,13 @@ type Axis = 'x' | 'y' | 'z';
 /** A pose rotation: bone, axis in character space, angle in degrees. */
 export type PoseRot = [bone: string, axis: Axis, deg: number];
 
-/** Standing at rest: arms lowered from the A-pose. */
-export const POSE_STAND: PoseRot[] = [
-  ['LeftArm', 'z', -48],
-  ['RightArm', 'z', 48],
-  ['LeftForeArm', 'x', -10],
-  ['RightForeArm', 'x', -10],
-];
+/** Standing at rest: arms lowered from the bind pose (the drop is measured per model, see `armDrop`). */
+function poseStand(drop: number): PoseRot[] {
+  return [
+    ['LeftArm', 'z', -drop],
+    ['LeftForeArm', 'x', -10],
+  ];
+}
 
 /** Sitting at a table, left forearm resting on the table top. */
 export const POSE_SIT: PoseRot[] = [
@@ -46,10 +46,15 @@ const ARM_DRINK: PoseRot[] = [
   ['RightForeArm', 'x', -115],
   ['RightForeArm', 'y', 30],
 ];
-const ARM_HANG: PoseRot[] = [
-  ['RightArm', 'z', 48],
-  ['RightForeArm', 'x', -10],
-];
+function armHang(drop: number): PoseRot[] {
+  return [
+    ['RightArm', 'z', drop],
+    ['RightForeArm', 'x', -10],
+  ];
+}
+
+/** Upper arms hang this many degrees out from the body when standing (clears the hips and a coat). */
+const HANG_ANGLE = 7;
 
 const AXES: Record<Axis, Vector3> = {
   x: new Vector3(1, 0, 0),
@@ -67,13 +72,11 @@ const _mouth = new Vector3();
 const _heldP = new Vector3();
 const _heldQ = new Quaternion();
 const _restP = new Vector3();
+const _restQ = new Quaternion();
 
 // A mug, in character space (metres; +z is where the character faces, +x its left).
-/** Between sips it stands on the table in front of the resting hand, handle towards the fingers… */
-const MUG_ON_TABLE = new Vector3(-0.07, -0.007, 0.08);
-/** …or hangs upright from the fingers when the arm is down. */
+/** With the arm down it hangs upright from the fingers. */
 const MUG_HANGING = new Vector3(0, -0.16, 0.03);
-const MUG_REST_ROT = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.5);
 /** In the hand: the middle of the mug, from the wrist. */
 const MUG_GRIP = new Vector3(0.1, 0.06, 0.03);
 /** The mouth, from the head bone; the rim goes there at the top of the sip. */
@@ -121,6 +124,14 @@ export class Character {
   carryTray = false;
   private handProp: Object3D | null = null;
   private mug: Object3D | null = null;
+  /** Where the mug stands between sips (see holdMug / holdOnTable). */
+  private mugRest = { tableY: null as number | null, reach: 0.08, side: -0.07, turn: 0.5 };
+  /**
+   * Degrees the upper arms swing down from the bind pose to hang at the sides. Measured from the
+   * model: the generated rigs hold their arms only about 22° out, and a fixed A-pose drop of 48°
+   * buried the arms in the body.
+   */
+  readonly armDrop: number;
 
   constructor(gltf: GLTF) {
     this.model = skeletonClone(gltf.scene);
@@ -144,6 +155,19 @@ export class Character {
       for (const c of o.children) visit(c);
     };
     visit(this.model);
+    this.armDrop = this.measureArmDrop();
+  }
+
+  private measureArmDrop(): number {
+    const arm = this.bones.get('LeftArm');
+    const fore = this.bones.get('LeftForeArm');
+    if (!arm || !fore) return 0;
+    this.root.updateMatrixWorld(true);
+    const a = this.root.worldToLocal(arm.getWorldPosition(new Vector3()));
+    const d = this.root.worldToLocal(fore.getWorldPosition(new Vector3())).sub(a);
+    // angle of the upper arm away from straight down, in the body's side plane
+    const out = Math.atan2(Math.abs(d.x), Math.max(1e-4, -d.y)) / D;
+    return clamp(out - HANG_ANGLE, 0, 60);
   }
 
   /** Attaches an object to a bone with a local offset (e.g. a mug in the right hand). */
@@ -163,6 +187,16 @@ export class Character {
     obj.rotation.set(rot[0], rot[1], rot[2]);
     b.add(obj);
     if (boneName === 'RightHand') this.handProp = obj;
+  }
+
+  /**
+   * Puts a mug by the right hand of a seated character: between sips it stands upright on the
+   * table (top at `tableY`, world) `reach` metres in front of the fist and `side` to its left, the
+   * handle turned back into the fingers; drinking lifts it to the mouth (see holdMug).
+   */
+  holdOnTable(obj: Object3D, tableY: number, reach = 0.07, side = 0): void {
+    this.mugRest = { tableY, reach, side, turn: Math.PI / 2 };
+    this.holdMug(obj);
   }
 
   get handObject(): Object3D | null {
@@ -189,9 +223,15 @@ export class Character {
     this.root.updateMatrixWorld(true);
     _inv.copy(this.root.matrixWorld).invert();
     _hp.setFromMatrixPosition(_m.multiplyMatrices(_inv, hand.matrixWorld));
-    _restP.copy(this.pose === 'sit' && this.armOnTable ? MUG_ON_TABLE : MUG_HANGING).add(_hp);
+    const rest = this.mugRest;
+    _restQ.setFromAxisAngle(AXES.y, rest.turn);
+    if (this.pose === 'sit' && this.armOnTable) {
+      // on the table: at its known height, or just under the resting wrist
+      const y = rest.tableY === null ? _hp.y - 0.007 : _v.set(0, rest.tableY, 0).applyMatrix4(_inv).y;
+      _restP.set(_hp.x + rest.side, y, _hp.z + rest.reach);
+    } else _restP.copy(MUG_HANGING).add(_hp);
     // in the hand, tipping towards the face near the top of the sip…
-    _heldQ.setFromAxisAngle(AXES.x, -MUG_TILT * smoothstep(0.5, 1, d)).multiply(MUG_REST_ROT);
+    _heldQ.setFromAxisAngle(AXES.x, -MUG_TILT * smoothstep(0.5, 1, d)).multiply(_restQ);
     _heldP
       .copy(MUG_GRIP)
       .add(_hp)
@@ -205,7 +245,7 @@ export class Character {
     // the hand takes the mug early in the lift and lets go of it late on the way down
     const k = smoothstep(0.04, 0.4, d);
     mug.position.lerpVectors(_restP, _heldP, k);
-    mug.quaternion.slerpQuaternions(MUG_REST_ROT, _heldQ, k);
+    mug.quaternion.slerpQuaternions(_restQ, _heldQ, k);
   }
 
   startDrink(): void {
@@ -250,7 +290,7 @@ export class Character {
     for (const [n, q] of this.bind) this.bones.get(n)!.quaternion.copy(q);
     this.root.updateMatrixWorld(true);
     const rots: PoseRot[] = [];
-    rots.push(...(this.pose === 'sit' ? POSE_SIT : POSE_STAND.filter((r) => !r[0].startsWith('Right'))));
+    rots.push(...(this.pose === 'sit' ? POSE_SIT : poseStand(this.armDrop)));
     const breathe = Math.sin(t * 1.55);
     rots.push(['Spine02', 'x', breathe * 0.9]);
     rots.push(['Spine', 'x', Math.sin(t * 1.55 + 0.5) * 0.7]);
@@ -260,7 +300,7 @@ export class Character {
       rots.push(['Head', 'x', -6 * k]);
     }
     // right arm: blend rest/hang and drink
-    const restArm = this.pose === 'sit' && this.armOnTable ? ARM_REST : ARM_HANG;
+    const restArm = this.pose === 'sit' && this.armOnTable ? ARM_REST : armHang(this.armDrop);
     const w = this.drink;
     const blended = new Map<string, number>();
     for (const [b, a, deg] of restArm) blended.set(`${b}|${a}`, deg * (1 - w));
@@ -283,7 +323,7 @@ export class Character {
       rots.push(['Spine', 'y', sp * 3 * w2]);
     }
     if (this.carryTray) {
-      rots.push(['LeftArm', 'z', -30]);
+      rots.push(['LeftArm', 'z', -Math.max(0, this.armDrop - 8)]);
       rots.push(['LeftArm', 'x', -25]);
       rots.push(['LeftForeArm', 'x', -80]);
     }

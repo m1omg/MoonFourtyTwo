@@ -30,3 +30,5 @@ Krea's MCP doesn't report what a job costs.
 | 5–7 | 2026-10-02 | elevenlabs/tts (eleven_v4) | Ežo voice auditions A/B/C (one line each) | unknown |
 
 After these 7 jobs the owner reported a Krea balance of **0**, far past the agreed limit of 1000. Krea is no longer used for this project. In the game, only audition B (Brian, the owner's pick) is used: it is cut into two lines, `e_intro2` and `e_intro3`. All other lines are subtitles only.
+
+2026-10-05: the two voice lines also ship as Opus (`.ogg`, converted locally with ffmpeg from the MP3s; no credits). Linux browsers without the proprietary codec library (e.g. Vivaldi without its ffmpeg package) cannot decode MP3. Vierka's apron, missing from her generated model, is modelled procedurally in the pub. No Higgsfield or Krea credits were spent on these fixes.

@@ -47,3 +47,4 @@ Every push to `main` or a `ccr-*` branch runs CI. CI then publishes `dist/` to t
 - CC0 models, textures and HDRIs from [Poly Haven](https://polyhaven.com) and [ambientCG](https://ambientcg.com).
 - Ežo's 3D model was generated with Higgsfield (Tripo image-to-3D + auto-rig). Other AI assets come from Higgsfield and Krea. Spending is tracked in `docs/asset-ledger.md`.
 - `docs/sealed-design.b64` holds the full story design. It is deliberately encoded (gzip+base64) so the owner isn't spoiled.
+- `docs/SPOILERS-agent-notes.md` is for agents working on the code: a map of every chapter, the fixes and known gaps. It contains spoilers (folded away under a warning), so the owner shouldn't read it.

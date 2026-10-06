@@ -95,7 +95,8 @@ test('the pub evening plays through to the frozen pub', async ({ page }, info) =
   await a.standUp();
   await a.teleport(-1.2, 0, -1.7, 0);
   await a.sim(0.5);
-  await a.use('vierka');
+  // Ežo may still be musing after the first round: order once he is done
+  expect(await until(page, () => a.use('vierka'), 30, 0.5)).toBe(true);
   expect(await until(page, () => a.choosing(), 20, 0.5)).toBe(true);
   await a.pick(2); // two beers
   await until(page, async () => (await a.inv()).some((s) => s.item === 'pivo' && s.count === 2), 30);
