@@ -1,8 +1,5 @@
 import {
   Color,
-  CylinderGeometry,
-  Group,
-  LatheGeometry,
   Mesh,
   MeshStandardMaterial,
   Object3D,
@@ -10,7 +7,6 @@ import {
   Scene,
   SphereGeometry,
   SpotLight,
-  Vector2,
   Vector3,
 } from 'three';
 import { GameLoop, SIM_DT } from '../core/loop.ts';
@@ -60,6 +56,7 @@ import {
   type SaveData,
 } from '../save/SaveGame.ts';
 import { wallClockMs } from '../core/time.ts';
+import { Handheld } from '../world/objects/handheld.ts';
 import type { DebugOptions } from './debug.ts';
 
 const _look = new Vector3();
@@ -138,9 +135,8 @@ export class Game {
   private drinkTimer = 0;
   private drinkDuration = 1;
   private drinkItem: ItemId | null = null;
-  /** First-person glass shown while drinking. */
-  private viewmodel = new Group();
-  private vmLiquid: Mesh;
+  /** First-person glass or food shown while drinking or eating. */
+  private readonly handheld = new Handheld();
   private skipRequested = false;
   private heartbeatTimer = 0;
   private lightObj: PointLight;
@@ -182,29 +178,9 @@ export class Game {
     this.torchObj = new SpotLight(0xe6eeff, 0, 18, 0.62, 0.5, 1.4);
     this.torchObj.castShadow = false;
     this.torchObj.target = this.torchTarget;
-    {
-      const glass = new Mesh(
-        new LatheGeometry(
-          [new Vector2(0, 0), new Vector2(0.03, 0), new Vector2(0.033, 0.11), new Vector2(0.035, 0.115)],
-          18,
-        ),
-        new MeshStandardMaterial({
-          color: 0xffffff,
-          roughness: 0.05,
-          transparent: true,
-          opacity: 0.3,
-          depthWrite: false,
-        }),
-      );
-      this.vmLiquid = new Mesh(
-        new CylinderGeometry(0.029, 0.027, 0.08, 14),
-        new MeshStandardMaterial({ color: 0xd9a53a, roughness: 0.3, transparent: true, opacity: 0.85 }),
-      );
-      this.vmLiquid.position.y = 0.045;
-      this.viewmodel.add(glass, this.vmLiquid);
-      this.viewmodel.visible = false;
-      this.renderer.camera.add(this.viewmodel);
-    }
+    // what you drink or eat, held up to your face
+    this.handheld.onBite = () => this.synth.click(undefined, 340, 0.18);
+    this.renderer.camera.add(this.handheld.root);
     this.loop = new GameLoop({ step: (dt) => this.step(dt), render: (a, fdt) => this.render(a, fdt) });
     this.input.attach(canvas);
     this.input.onPointerLockLost = () => {
@@ -936,13 +912,10 @@ export class Game {
     }
     const item = this.inventory.takeSelected()!;
     this.drinkItem = item;
-    this.drinkTimer = ITEMS[item].kind === 'food' ? 1.4 : ITEMS[item].glass === 'mug' ? 2.2 : 1.1;
+    this.drinkTimer = Handheld.seconds(ITEMS[item]);
     this.drinkDuration = this.drinkTimer;
-    (this.vmLiquid.material as MeshStandardMaterial).color.setHex(ITEMS[item].color);
-    this.viewmodel.scale.setScalar(
-      ITEMS[item].glass === 'mug' ? 1.3 : ITEMS[item].glass === 'shot' ? 0.6 : 1,
-    );
-    this.synth.pour(this.drinkTimer * 0.8, undefined, true);
+    this.handheld.start(ITEMS[item]);
+    if (ITEMS[item].kind === 'drink') this.synth.pour(this.drinkTimer * 0.8, undefined, true);
   }
 
   /** Drinks immediately (scripted rounds at the table). */
@@ -1134,12 +1107,8 @@ export class Game {
       // first-person drinking
       if (this.drinkTimer > 0 && this.drinkItem) {
         const p = 1 - Math.max(0, this.drinkTimer - alpha * SIM_DT) / this.drinkDuration;
-        const up = Math.min(1, p * 2.2);
-        this.viewmodel.visible = ITEMS[this.drinkItem].kind === 'drink';
-        this.viewmodel.position.set(0.12 - 0.1 * up, -0.38 + 0.3 * up, -0.42 + 0.17 * up);
-        this.viewmodel.rotation.set(Math.max(0, p - 0.35) * 2.2, 0, -0.15 * (1 - up));
-        this.vmLiquid.scale.y = Math.max(0.05, 1 - Math.max(0, p - 0.45) * 1.8);
-      } else this.viewmodel.visible = false;
+        this.handheld.pose(p);
+      } else this.handheld.hide();
       this.applyPostFx();
       this.renderer.render(frameDt);
       this.audio.updateListener(cam);
