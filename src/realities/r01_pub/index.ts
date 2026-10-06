@@ -69,6 +69,10 @@ const reality: RealityModule = {
       wcScene: 0,
       wcTimer: 0,
       r2Talked: game.flags.has('pub.r2talk'),
+      /** Back in the WC after an okno: the two regulars wait until you are out of it. */
+      wakeWhenOut: false,
+      wakeAt: 0,
+      r2Waiting: false,
       slotSpin: 0,
       slotReels: ['7', 'ČE', 'ZV'] as string[],
       jukebox: -1,
@@ -304,9 +308,11 @@ const reality: RealityModule = {
     // frozen-pub interactions
     I.add({
       id: 'keys',
-      pos: pub.vierkaSpot.clone().add(new Vector3(0, 0.95, 0.15)),
-      radius: 0.3,
-      range: 2.6,
+      // she stands frozen behind the bar: looking at her is enough, you reach over the counter
+      pos: pub.vierkaSpot.clone().add(new Vector3(0, 1.15, 0.1)),
+      radius: 0.5,
+      range: 3.0,
+      ignoreOcclusion: true,
       prompt: 'Vziať kľúče zo zástery',
       enabled: () => s.phase === 'r2' && !s.keys,
       onUse: () => {
@@ -602,7 +608,18 @@ const reality: RealityModule = {
     }
 
     async function r2Talk(): Promise<void> {
-      if (s.r2Talked) return;
+      if (s.r2Talked || s.r2Waiting) return;
+      // he finishes the sentence he is in first: it must not swallow the explanation
+      s.r2Waiting = true;
+      try {
+        await game.clock.until(() => !s.busy);
+      } catch (e) {
+        if (!(e instanceof Cancelled)) console.error(e);
+        return;
+      } finally {
+        s.r2Waiting = false;
+      }
+      if (!s.seated || s.r2Talked) return;
       await solo(async () => {
         await say('e_r2_2');
         await say('e_r2_3');
@@ -660,7 +677,7 @@ const reality: RealityModule = {
           s.inWc = true;
           swapToFrozen();
           pub.wcDoor.close();
-          if (s.r2Talked) for (const w of watchers) w.awake = true;
+          s.wakeWhenOut = s.r2Talked;
           return;
         }
         startAmbience();
@@ -808,10 +825,19 @@ const reality: RealityModule = {
           }
         } else {
           // reality 2
-          if (!s.r2Talked && !s.busy) {
+          if (!s.r2Talked && !s.busy && !s.seated) {
             const d = p.distanceTo(pub.ezoSeat);
             if (d < 2.2) void solo(() => say('e_r2_1'));
             else if (game.rng.chance(dt * 0.25)) void solo(() => say('e_loop'));
+          }
+          if (s.wakeWhenOut && !(p.x < -6.15 && p.z < 0.2 && p.z > -3.2)) {
+            s.wakeWhenOut = false;
+            s.wakeAt = game.clock.time + 1.5;
+          }
+          if (s.wakeAt > 0 && game.clock.time >= s.wakeAt) {
+            s.wakeAt = 0;
+            for (const w of watchers) w.awake = true;
+            s.flickerAt = game.clock.time + 5;
           }
           if (s.r2Talked && game.clock.time > s.flickerAt) {
             s.lightsOff = !s.lightsOff;
