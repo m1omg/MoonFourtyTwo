@@ -86,7 +86,7 @@ const reality: RealityModule = {
       // one more
       pub.ezo?.startDrink();
       await game.clock.wait(0.8);
-      game.synth.clink(pub.ezoMug.position, 1);
+      game.synth.clink(pub.ezoMug.getWorldPosition(new Vector3()), 1);
       await game.clock.wait(1.4);
       pub.ezo?.stopDrink();
       st.phase = 'end';

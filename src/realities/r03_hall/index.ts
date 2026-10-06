@@ -334,7 +334,7 @@ const reality: RealityModule = {
       ezo.pose = 'sit';
       ezo.root.position.set(ezoCell.x, -0.5, ezoCell.z - 0.75);
       scene.add(ezo.root);
-      ezo.attach('RightHand', tw.mug(0.5), [0.02, -0.07, 0.06], [0, 0, Math.PI / 2]);
+      ezo.holdMug(tw.mug(0.5));
     }
     props.place('WoodenTable_03', { pos: [ezoCell.x, 0, ezoCell.z], rotY: Math.PI / 2 });
     // chair rotY 0 faces +z: Ežo sits on the -z side facing the table, the player across from him

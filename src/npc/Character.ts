@@ -1,4 +1,4 @@
-import { Group, Quaternion, Vector3 } from 'three';
+import { Group, Matrix4, Quaternion, Vector3 } from 'three';
 import type { Object3D, SkinnedMesh, Bone, Mesh } from 'three';
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -38,12 +38,13 @@ const ARM_REST: PoseRot[] = [
   ['RightForeArm', 'x', -50],
   ['RightForeArm', 'y', 28],
 ];
+/** The hand comes up in front of the mouth, a little to the right of it. */
 const ARM_DRINK: PoseRot[] = [
-  ['RightArm', 'z', 22],
-  ['RightArm', 'x', -60],
+  ['RightArm', 'z', 34],
+  ['RightArm', 'x', -45],
   ['RightArm', 'y', 8],
-  ['RightForeArm', 'x', -112],
-  ['RightForeArm', 'y', 6],
+  ['RightForeArm', 'x', -115],
+  ['RightForeArm', 'y', 30],
 ];
 const ARM_HANG: PoseRot[] = [
   ['RightArm', 'z', 48],
@@ -59,6 +60,32 @@ const _pq = new Quaternion();
 const _q = new Quaternion();
 const _rootInv = new Quaternion();
 const _v = new Vector3();
+const _m = new Matrix4();
+const _inv = new Matrix4();
+const _hp = new Vector3();
+const _mouth = new Vector3();
+const _heldP = new Vector3();
+const _heldQ = new Quaternion();
+const _restP = new Vector3();
+
+// A mug, in character space (metres; +z is where the character faces, +x its left).
+/** Between sips it stands on the table in front of the resting hand, handle towards the fingers… */
+const MUG_ON_TABLE = new Vector3(-0.07, -0.007, 0.08);
+/** …or hangs upright from the fingers when the arm is down. */
+const MUG_HANGING = new Vector3(0, -0.16, 0.03);
+const MUG_REST_ROT = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), 0.5);
+/** In the hand: the middle of the mug, from the wrist. */
+const MUG_GRIP = new Vector3(0.1, 0.06, 0.03);
+/** The mouth, from the head bone; the rim goes there at the top of the sip. */
+const MOUTH = new Vector3(0, -0.01, 0.1);
+const MUG_MID = 0.075;
+const MUG_RIM = 0.15;
+/** How far the mug tips towards the face at the top of the sip. */
+const MUG_TILT = 100 * D;
+const smoothstep = (a: number, b: number, x: number) => {
+  const t = clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
 
 /**
  * A rigged character (Meshy/Mixamo-style humanoid) posed procedurally every frame:
@@ -93,6 +120,7 @@ export class Character {
   /** Left forearm raised to carry a tray. */
   carryTray = false;
   private handProp: Object3D | null = null;
+  private mug: Object3D | null = null;
 
   constructor(gltf: GLTF) {
     this.model = skeletonClone(gltf.scene);
@@ -138,7 +166,46 @@ export class Character {
   }
 
   get handObject(): Object3D | null {
-    return this.handProp;
+    return this.handProp ?? this.mug;
+  }
+
+  /**
+   * Gives the character a mug. Between sips it stands upright beside the right hand (on the table
+   * when seated); drinking takes it into the hand and up to the mouth, and puts it back.
+   */
+  holdMug(mug: Object3D): void {
+    this.mug = mug;
+    this.root.add(mug);
+    this.placeMug();
+  }
+
+  /** Puts the mug where the right hand and the drink pose say (character space). */
+  private placeMug(): void {
+    const hand = this.bones.get('RightHand');
+    const head = this.bones.get('Head');
+    const mug = this.mug;
+    if (!hand || !mug) return;
+    const d = this.drink;
+    this.root.updateMatrixWorld(true);
+    _inv.copy(this.root.matrixWorld).invert();
+    _hp.setFromMatrixPosition(_m.multiplyMatrices(_inv, hand.matrixWorld));
+    _restP.copy(this.pose === 'sit' && this.armOnTable ? MUG_ON_TABLE : MUG_HANGING).add(_hp);
+    // in the hand, tipping towards the face near the top of the sip…
+    _heldQ.setFromAxisAngle(AXES.x, -MUG_TILT * smoothstep(0.5, 1, d)).multiply(MUG_REST_ROT);
+    _heldP
+      .copy(MUG_GRIP)
+      .add(_hp)
+      .sub(_v.set(0, MUG_MID, 0).applyQuaternion(_heldQ));
+    // …until the rim is at the mouth
+    if (head) {
+      _mouth.setFromMatrixPosition(_m.multiplyMatrices(_inv, head.matrixWorld)).add(MOUTH);
+      _mouth.sub(_v.set(0, MUG_RIM, 0).applyQuaternion(_heldQ));
+      _heldP.lerp(_mouth, smoothstep(0.6, 0.97, d));
+    }
+    // the hand takes the mug early in the lift and lets go of it late on the way down
+    const k = smoothstep(0.04, 0.4, d);
+    mug.position.lerpVectors(_restP, _heldP, k);
+    mug.quaternion.slerpQuaternions(MUG_REST_ROT, _heldQ, k);
   }
 
   startDrink(): void {
@@ -247,5 +314,6 @@ export class Character {
       }
       b.updateMatrixWorld(true);
     }
+    this.placeMug();
   }
 }

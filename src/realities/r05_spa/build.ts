@@ -644,7 +644,7 @@ export async function buildSpa(ctx: RealityCtx): Promise<Spa> {
     ezo.root.position.copy(ezoSeat);
     scene.add(ezo.root);
     const tw = new Tableware(scope);
-    ezo.attach('RightHand', tw.mug(0.6), [0.02, -0.07, 0.06], [0, 0, Math.PI / 2]);
+    ezo.holdMug(tw.mug(0.6));
   }
 
   // ───────── diving hall ─────────

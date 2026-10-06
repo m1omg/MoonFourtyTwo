@@ -349,7 +349,7 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   playerMug.position.set(3.2, tableTop + 0.004, 2.86);
   scene.add(playerMug);
   const ezoMug = tw.mug(0.6);
-  if (ezo) ezo.attach('RightHand', ezoMug, [0.02, -0.07, 0.06], [0, 0, Math.PI / 2]);
+  if (ezo) ezo.holdMug(ezoMug);
   const crowdMat = tallyTexture(scope, 3871, 7);
   for (const [x, z] of [
     [-1.1, 2.9],
