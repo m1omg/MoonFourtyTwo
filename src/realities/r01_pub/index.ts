@@ -647,7 +647,7 @@ const reality: RealityModule = {
       w.headHeight = 1.0;
       // each time they get you they come a little slower (down to about the story pace)
       const ease = Math.max(0.6, 0.85 ** game.caughtHere);
-      w.speed = (game.settings.difficulty === 'story' ? 1.3 : 2.2) * ease;
+      w.speed = (game.settings.difficulty === 'story' ? 0.45 : 0.75) * ease;
       game.entities.push(w);
       watchers.push(w);
       return w;

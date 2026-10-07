@@ -20,6 +20,10 @@ export class Watcher extends Entity {
   private readonly head = new Vector3();
   private readonly tmp = new Vector3();
 
+  override get dormant(): boolean {
+    return !this.awake;
+  }
+
   constructor(id: string) {
     super(id, 'watcher');
     this.radius = 0.4;

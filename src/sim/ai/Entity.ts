@@ -30,6 +30,11 @@ export abstract class Entity {
     readonly kind: string,
   ) {}
 
+  /** Can't hurt anyone right now (asleep): being near it is safe, for saving too. */
+  get dormant(): boolean {
+    return false;
+  }
+
   setState(s: string): void {
     if (s === this.state) return;
     this.state = s;

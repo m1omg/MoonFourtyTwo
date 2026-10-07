@@ -57,6 +57,7 @@ import {
 } from '../save/SaveGame.ts';
 import { wallClockMs } from '../core/time.ts';
 import { Handheld } from '../world/objects/handheld.ts';
+import { dangerNear } from '../sim/ai/danger.ts';
 import type { DebugOptions } from './debug.ts';
 
 const _look = new Vector3();
@@ -534,6 +535,8 @@ export class Game {
     this.onSignal = null;
     this.player.forcedHeight = null;
     this.tweens = [];
+    this.pendingSave = null;
+    this.respawnHold = null;
     for (const pr of this.projectiles) pr.mesh.removeFromParent();
     this.projectiles = [];
     this.seated = false;
@@ -557,6 +560,12 @@ export class Game {
   saveCheckpoint(cp: string): void {
     this.checkpoint = cp;
     if (this.debug.test && !this.debug.saves) return;
+    // never an autosave with something dangerous beside you: it waits until they are away
+    if (dangerNear(this.entities, this.player.pos)) {
+      this.pendingSave = cp;
+      return;
+    }
+    this.pendingSave = null;
     writeSave({
       v: 1,
       reality: this.realityId,
@@ -613,8 +622,8 @@ export class Game {
     this.lastOkno = reason;
     await this.startReality(save?.reality ?? this.realityId, save?.checkpoint ?? this.checkpoint, true);
     this.lastOkno = null;
-    // threats hold still for a moment after a blackout: no checkpoint can catch you again at once
-    this.respawnGrace = 4;
+    // after a blackout nothing moves until you step away from where you woke
+    this.respawnHold = this.player.pos.clone();
   }
 
   /** While a reality restarts after an okno: what caused it (an entity id, 'alcohol', …). */
@@ -626,8 +635,10 @@ export class Game {
     return this.caught.get(this.realityId) ?? 0;
   }
 
-  /** Seconds after an okno during which threats do not move. */
-  private respawnGrace = 0;
+  /** Where you woke after an okno: threats hold still until you are 1.5 m from it. */
+  private respawnHold: Vector3 | null = null;
+  /** A checkpoint save waiting for the danger beside you to go (see saveCheckpoint). */
+  private pendingSave: string | null = null;
 
   // ───────────────────────────── scripting helpers ─────────────────────────────
 
@@ -796,8 +807,12 @@ export class Game {
     ctx.time = this.clock.time;
     ctx.dt = dt;
     ctx.noises = this.noises;
-    if (this.respawnGrace > 0) this.respawnGrace -= dt;
-    else for (const e of this.entities) e.tick(dt, ctx);
+    const hold = this.respawnHold;
+    if (hold && Math.hypot(this.player.pos.x - hold.x, this.player.pos.z - hold.z) >= 1.5)
+      this.respawnHold = null;
+    if (!this.respawnHold) for (const e of this.entities) e.tick(dt, ctx);
+    if (this.pendingSave && !dangerNear(this.entities, this.player.pos))
+      this.saveCheckpoint(this.pendingSave);
     this.noises = [];
 
     // status

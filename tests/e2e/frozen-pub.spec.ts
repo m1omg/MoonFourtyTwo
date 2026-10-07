@@ -97,10 +97,19 @@ test('a blackout in the frozen pub wakes you by Ežo, not in a loop in the WC', 
   expect(woke.checkpoint).toBe('frozenTable');
   expect(Math.hypot(woke.pos[0]! - 2.2, woke.pos[2]! - 2.3)).toBeLessThan(0.3);
   for (const e of woke.entities) expect(Math.hypot(e.pos[0]! + 4.3, e.pos[2]! - 2.6)).toBeLessThan(1.5);
-  // Ežo tells you again what he told you at the table; as long as you keep your eyes on the
-  // regulars, they stay put
+  // Ežo tells you again what he told you at the table
   expect(await until(page, async () => (await subtitle()).includes('Na tých dvoch'), 6, 0.25)).toBe(true);
-  await a.sim(4);
+  // nobody moves while you stay where you woke, even looking away
+  await a.aim(2.2, 1.5, 8);
+  await a.sim(15);
   expect(await a.mode()).toBe('play');
+  for (const e of (await a.info()).entities)
+    expect(Math.hypot(e.pos[0]! + 4.3, e.pos[2]! - 2.6)).toBeLessThan(1.5);
+  // step away (and keep looking away): they come again, slowly
+  await a.teleport(1.0, 0.2);
+  await a.aim(1.0, 1.5, 8);
+  await a.sim(3);
+  const moved = (await a.info()).entities.some((e) => Math.hypot(e.pos[0]! + 4.3, e.pos[2]! - 2.6) > 1.6);
+  expect(moved).toBe(true);
   expect(errors, errors.join('\n')).toHaveLength(0);
 });
