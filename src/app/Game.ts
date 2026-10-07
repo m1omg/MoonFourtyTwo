@@ -595,16 +595,42 @@ export class Game {
     this.input.setEnabled(false);
     this.synth.stinger(0.6);
     this.fx.shake = 0.6;
+    // caught: you turn round and see what got you before it goes dark (not the drink's fault)
+    const by = this.entities.find((e) => e.id === reason);
+    if (by) {
+      this.caught.set(this.realityId, this.caughtHere + 1);
+      const p = this.player;
+      const dx = by.pos.x - p.pos.x;
+      const dz = by.pos.z - p.pos.z;
+      const up = by.pos.y + 1.1 - (p.pos.y + p.eyeHeight());
+      this.rig.lockTarget = {
+        yaw: Math.atan2(-dx, -dz),
+        pitch: clamp(Math.atan2(up, Math.hypot(dx, dz)), -0.6, 0.6),
+        rate: 10,
+      };
+      await this.tweenFx('fade', 0.25, 0.75);
+    }
     await this.tweenFx('fade', 1, 0.6);
     this.disposeReality();
-    await this.ui.showOkno();
+    await this.ui.showOkno(3.2, t(by ? 'oknoCaught' : 'oknoSub'));
     const save = loadSave();
     if (save) this.restoreSave(save);
     this.status.reset(Math.min(1, this.status.intox.bac));
     this.status.buffs.add('hangover', 60);
+    this.lastOkno = reason;
     await this.startReality(save?.reality ?? this.realityId, save?.checkpoint ?? this.checkpoint, true);
+    this.lastOkno = null;
     // threats hold still for a moment after a blackout: no checkpoint can catch you again at once
     this.respawnGrace = 4;
+  }
+
+  /** While a reality restarts after an okno: what caused it (an entity id, 'alcohol', …). */
+  lastOkno: string | null = null;
+  /** Times a threat has caught you in each reality this session. */
+  private readonly caught = new Map<string, number>();
+  /** How often a threat caught you in this reality this session (realities may ease off). */
+  get caughtHere(): number {
+    return this.caught.get(this.realityId) ?? 0;
   }
 
   /** Seconds after an okno during which threats do not move. */

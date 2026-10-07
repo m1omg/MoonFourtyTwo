@@ -645,11 +645,14 @@ const reality: RealityModule = {
       w.home.copy(w.pos);
       w.canBeSeen = () => !s.lightsOff;
       w.headHeight = 1.0;
-      w.speed = game.settings.difficulty === 'story' ? 1.3 : 2.2;
+      // each time they get you they come a little slower (down to about the story pace)
+      const ease = Math.max(0.6, 0.85 ** game.caughtHere);
+      w.speed = (game.settings.difficulty === 'story' ? 1.3 : 2.2) * ease;
       game.entities.push(w);
       watchers.push(w);
       return w;
     };
+    const creakAt = new Map<Watcher, number>();
     const wJano = makeWatcher('jano', pub.jano);
     const wFero = makeWatcher('fero', pub.fero);
 
@@ -782,7 +785,16 @@ const reality: RealityModule = {
             game.rig.setOrientation(t.yaw, 0);
             if (cp !== 'frozenTable') game.saveCheckpoint('frozenTable');
           } else pub.wcDoor.close();
-          if (s.r2Talked) wakeWatchersLater(3);
+          if (s.r2Talked) {
+            wakeWatchersLater(3);
+            // back after they got you: Ežo says it again
+            if (watchers.some((w) => w.id === game.lastOkno))
+              void soloWhenFree(async () => {
+                await game.clock.wait(1.2);
+                await say('e_r2_3');
+                await say('e_r2_5');
+              });
+          }
           return;
         }
         startAmbience();
@@ -962,6 +974,12 @@ const reality: RealityModule = {
               s.r2LineAt = game.clock.time + 6;
               void solo(() => say('e_loop'));
             }
+          }
+          // you hear them move
+          for (const w of watchers) {
+            if (w.state !== 'creep' || game.clock.time - (creakAt.get(w) ?? -9) < 0.9) continue;
+            creakAt.set(w, game.clock.time);
+            game.synth.creak(w.pos.clone().setY(0.6), 0.35, 0.07);
           }
           if (s.r2Talked && game.clock.time > s.flickerAt) {
             s.lightsOff = !s.lightsOff;

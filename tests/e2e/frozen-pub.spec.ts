@@ -84,8 +84,10 @@ test('a blackout in the frozen pub wakes you by Ežo, not in a loop in the WC', 
   await a.teleport(0.5, 1.0, 0);
   await a.aim(0.5, 1.5, -4.4);
   expect(await until(page, async () => (await a.mode()) !== 'play', 30, 0.25)).toBe(true);
-  // the blackout passes (fade on sim time, the screen on wall time, then the reload)
-  await a.sim(1);
+  // you see what got you, then the blackout passes (fade on sim time, the screen on wall time,
+  // then the reload); it says you were caught, not that you drank too much
+  for (let i = 0; i < 8; i++) await a.sim(0.25); // in steps: each fade starts when the last ends
+  await expect(page.locator('.okno-sub')).toHaveText('Niečo ťa dostalo.');
   await page.waitForFunction(() => (window as unknown as { __mf42: Api }).__mf42.mode === 'play', null, {
     timeout: 120_000,
   });
@@ -95,8 +97,10 @@ test('a blackout in the frozen pub wakes you by Ežo, not in a loop in the WC', 
   expect(woke.checkpoint).toBe('frozenTable');
   expect(Math.hypot(woke.pos[0]! - 2.2, woke.pos[2]! - 2.3)).toBeLessThan(0.3);
   for (const e of woke.entities) expect(Math.hypot(e.pos[0]! + 4.3, e.pos[2]! - 2.6)).toBeLessThan(1.5);
-  // and as long as you keep your eyes on them, they stay put
-  await a.sim(6);
+  // Ežo tells you again what he told you at the table; as long as you keep your eyes on the
+  // regulars, they stay put
+  expect(await until(page, async () => (await subtitle()).includes('Na tých dvoch'), 6, 0.25)).toBe(true);
+  await a.sim(4);
   expect(await a.mode()).toBe('play');
   expect(errors, errors.join('\n')).toHaveLength(0);
 });

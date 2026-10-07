@@ -26,8 +26,11 @@ const PITCH_LIMIT = 1.45;
 export class CameraRig {
   yaw = 0;
   pitch = 0;
-  /** When set, look input is ignored and the camera eases toward this target (dialogue focus). */
-  lockTarget: { yaw: number; pitch: number } | null = null;
+  /**
+   * When set, look input is ignored and the camera eases toward this target (dialogue focus);
+   * `rate` is how quickly (default 5).
+   */
+  lockTarget: { yaw: number; pitch: number; rate?: number } | null = null;
   lookEnabled = true;
   private bobAmp = 0;
   private roll = 0;
@@ -51,8 +54,9 @@ export class CameraRig {
   update(frameDt: number, alpha: number, fx: CameraFx): void {
     const p = this.player;
     if (this.lockTarget) {
-      this.yaw = dampAngleShort(this.yaw, this.lockTarget.yaw, 5, frameDt);
-      this.pitch = damp(this.pitch, this.lockTarget.pitch, 5, frameDt);
+      const rate = this.lockTarget.rate ?? 5;
+      this.yaw = dampAngleShort(this.yaw, this.lockTarget.yaw, rate, frameDt);
+      this.pitch = damp(this.pitch, this.lockTarget.pitch, rate, frameDt);
     }
     p.yaw = this.yaw;
     p.pitch = this.pitch;

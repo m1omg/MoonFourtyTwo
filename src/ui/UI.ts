@@ -444,13 +444,9 @@ export class UI {
     };
   }
 
-  async showOkno(seconds = 3.2): Promise<void> {
+  async showOkno(seconds = 3.2, sub = t('oknoSub')): Promise<void> {
     this.setHudVisible(false);
-    this.screen(
-      'black',
-      el('div', { class: 'okno' }, t('okno')),
-      el('div', { class: 'okno-sub' }, t('oknoSub')),
-    );
+    this.screen('black', el('div', { class: 'okno' }, t('okno')), el('div', { class: 'okno-sub' }, sub));
     await wait(seconds * 1000);
     this.clearScreens();
   }

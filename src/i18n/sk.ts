@@ -34,6 +34,7 @@ export const sk = {
   loadingTip5: 'Ak sa niečo hýbe len vtedy, keď sa nepozeráš, nepozeraj sa preč.',
   okno: 'okno',
   oknoSub: 'Niečo ti chýba. Kus večera.',
+  oknoCaught: 'Niečo ťa dostalo.',
   pressToStart: 'Klikni alebo ťukni pre pokračovanie',
   rotateDevice: 'Otoč zariadenie na šírku',
   clickToLook: 'Klikni do hry, aby si sa mohol rozhliadať',
