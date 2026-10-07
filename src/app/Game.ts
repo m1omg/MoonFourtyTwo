@@ -214,6 +214,8 @@ export class Game {
     const s = this.settings;
     this.input.look.mouseSensitivity = 0.0022 * s.mouseSensitivity;
     this.input.look.touchSensitivity = 0.0045 * s.touchSensitivity;
+    this.input.look.touchStickSpeed = 2.4 * s.touchSensitivity;
+    this.touch?.setScheme(s.touchScheme);
     this.input.look.invertY = s.invertY;
     this.input.setBinds(s.keys);
     this.renderer.setFov(s.fov);
@@ -1128,6 +1130,7 @@ export class Game {
       if (v > 0 && v < 1 / 100) this.loop.fpsCap = 60;
     }
     this.input.pollGamepad(frameDt);
+    this.input.stepTouchLook(frameDt);
     const look = this.input.consumeLook();
     if (this.mode === 'play' && !this.loop.paused) this.rig.applyLook(look.dx, look.dy);
     const st = this.status;

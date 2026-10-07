@@ -578,6 +578,34 @@ body {
   transition: none;
 }
 
+.touch .swipe-ring {
+  /* where a walking swipe started (swipe scheme): twice SWIPE_R across */
+  position: absolute;
+  width: 140px;
+  height: 140px;
+  margin: -70px 0 0 -70px;
+  border-radius: 50%;
+  border: 1px solid rgba(239, 230, 212, 0.25);
+  background: rgba(8, 6, 5, 0.18);
+  pointer-events: none;
+  display: none;
+}
+
+.touch .swipe-ring.show {
+  display: block;
+}
+
+.touch .swipe-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  background: rgba(239, 230, 212, 0.45);
+}
+
 .touch .tbtn {
   position: absolute;
   width: 64px;

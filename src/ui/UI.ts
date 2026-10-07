@@ -343,6 +343,10 @@ export class UI {
       range('sfx', t('setSfx'), 0, 1, 0.05);
       range('mouseSensitivity', t('setSensitivity'), 0.2, 3, 0.05);
       range('touchSensitivity', t('setTouchSensitivity'), 0.2, 3, 0.05);
+      select('touchScheme', t('setTouchScheme'), [
+        ['stick', t('touchSchemeStick')],
+        ['swipe', t('touchSchemeSwipe')],
+      ]);
       select('invertY', t('setInvertY'), [
         [false, t('off')],
         [true, t('on')],

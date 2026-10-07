@@ -75,3 +75,39 @@ test('touch: the stick walks, the right half looks, also held upright', async ({
   expect(Math.hypot(e.pos[0]! - d.pos[0]!, e.pos[2]! - d.pos[2]!)).toBeGreaterThan(1);
   expect(errors).toEqual([]);
 });
+
+test('touch, the other way round: a swipe walks, the stick turns the view', async ({ page }, ti) => {
+  test.skip(ti.project.name !== 'mobile');
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  // Nastavenia → Dotykové ovládanie: „Ťahaním chodíš, joystick otáča kameru"
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'este-jedno.settings.v1',
+      JSON.stringify({ v: 1, touchScheme: 'swipe', warned: true }),
+    ),
+  );
+  await page.goto('./#r0&test&q=low&seed=3');
+  await page.waitForFunction(() => (window as unknown as W).__mf42?.ready === true, null, {
+    timeout: 180_000,
+  });
+  await page.evaluate(() => (window as unknown as W).__mf42.sim(0.5));
+
+  // a swipe up on the right half walks forward while the finger stays down
+  const a = await info(page);
+  // (clear of the buttons in the bottom-right corner)
+  await drag(page, [560, 220], [560, 140], () => page.evaluate(() => (window as unknown as W).__mf42.sim(1)));
+  await page.evaluate(() => (window as unknown as W).__mf42.sim(1)); // coming to a stop
+  const b = await info(page);
+  expect(Math.hypot(b.pos[0]! - a.pos[0]!, b.pos[2]! - a.pos[2]!)).toBeGreaterThan(1);
+
+  // the stick (bottom left) turns the view, at a rate, for as long as it is held (and walks nowhere)
+  await drag(page, [108, 280], [170, 280], () =>
+    page.evaluate(() => (window as unknown as W).__mf42.frames(30, 60)),
+  );
+  const c = await info(page);
+  expect(Math.abs(c.yaw - b.yaw)).toBeGreaterThan(0.3);
+  expect(Math.hypot(c.pos[0]! - b.pos[0]!, c.pos[2]! - b.pos[2]!)).toBeLessThan(0.05);
+  expect(errors).toEqual([]);
+});

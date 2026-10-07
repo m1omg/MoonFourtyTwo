@@ -22,6 +22,8 @@ export interface Settings {
   resolution: 'auto' | '1' | '0.85' | '0.7' | '0.55';
   /** Frame rate and render statistics in a corner. */
   showFps: boolean;
+  /** Touch: the stick walks and dragging looks, or dragging walks and the stick looks. */
+  touchScheme: 'stick' | 'swipe';
   /** Keyboard controls moved to other keys (the rest keep their defaults). */
   keys: Partial<KeyBinds>;
   warned: boolean;
@@ -44,6 +46,7 @@ export const DEFAULT_SETTINGS: Settings = {
   difficulty: 'normal',
   resolution: 'auto',
   showFps: false,
+  touchScheme: 'stick',
   keys: {},
   warned: false,
 };

@@ -62,6 +62,8 @@ export interface LookSettings {
   touchSensitivity: number;
   /** Radians per second at full gamepad deflection. */
   gamepadLookSpeed: number;
+  /** Radians per second with the touch look stick pushed all the way (alternate touch scheme). */
+  touchStickSpeed: number;
   invertY: boolean;
 }
 
@@ -75,6 +77,7 @@ export class InputManager {
     mouseSensitivity: 0.0022,
     touchSensitivity: 0.0045,
     gamepadLookSpeed: 2.6,
+    touchStickSpeed: 2.4,
     invertY: false,
   };
 
@@ -89,6 +92,7 @@ export class InputManager {
   private touchSprint = false;
   private gpMove = { x: 0, y: 0 };
   private gpLook = { x: 0, y: 0 };
+  private touchLookRate = { x: 0, y: 0 };
   private gpSprint = false;
   private gpCrouch = false;
   private gpPrev: boolean[] = [];
@@ -181,6 +185,20 @@ export class InputManager {
     this.touchMove.x = x;
     this.touchMove.y = y;
     this.touchSprint = sprint;
+  }
+
+  /** Touch look stick (-1..1): turns the view at a rate, like a gamepad's right stick. */
+  setTouchLookRate(x: number, y: number): void {
+    this.touchLookRate.x = x;
+    this.touchLookRate.y = y;
+  }
+
+  /** Turns the view by the touch look stick; call once per displayed frame (a rate: × frameDt). */
+  stepTouchLook(frameDt: number): void {
+    if (!this.enabled) return;
+    const curve = (v: number) => Math.sign(v) * v * v;
+    this.lookDX += curve(this.touchLookRate.x) * this.look.touchStickSpeed * frameDt;
+    this.lookDY += curve(this.touchLookRate.y) * this.look.touchStickSpeed * frameDt;
   }
 
   /** Raw touch look in pixels. */
