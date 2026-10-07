@@ -86,6 +86,10 @@ const reality: RealityModule = {
       jukebox: -1,
       ezoDrinkT: 0,
       keys: game.flags.has('pub.keys'),
+      /** Vierka is handing you the keys (see vierkaGivesKeys). */
+      giving: false,
+      /** 0..1 while the key ring slides from her apron onto the counter; -1 otherwise. */
+      keySlide: -1,
     };
     pub.ourMat.draw(s.tallies);
     if (s.keys && pub.vierkaKeys) pub.vierkaKeys.visible = false;
@@ -351,21 +355,14 @@ const reality: RealityModule = {
     // frozen-pub interactions
     I.add({
       id: 'keys',
-      // the keys are in her apron, below the counter's edge: she stands frozen behind the bar,
-      // so looking at her is enough (you reach over the counter)
-      pos: pub.vierkaSpot.clone().add(new Vector3(0, 1.15, 0.1)),
-      radius: 0.5,
-      range: 3.0,
+      // she gives them to you herself when you come to the bar; asking her works too
+      pos: pub.vierkaSpot.clone().add(new Vector3(0, 1.25, 0.1)),
+      radius: 0.6,
+      range: 3.5,
       ignoreOcclusion: true,
-      prompt: 'Vziať kľúče zo zástery',
-      enabled: () => s.phase === 'r2' && !s.keys,
-      onUse: () => {
-        s.keys = true;
-        game.flags.put('pub.keys');
-        if (pub.vierkaKeys) pub.vierkaKeys.visible = false;
-        game.synth.click(pub.vierkaSpot, 3200, 0.12);
-        void solo(() => say('t_keys'));
-      },
+      prompt: 'Poprosiť Vierku o kľúče',
+      enabled: () => s.phase === 'r2' && !s.keys && !s.giving,
+      onUse: () => vierkaGivesKeys(),
     });
     for (const [id, item, count, x] of [
       ['shelfBor', 'borovicka', 3, -2.3],
@@ -400,6 +397,34 @@ const reality: RealityModule = {
       }
       await solo(fn);
     }
+    /**
+     * Vierka comes to for a moment: she looks up at you, says a word and slides the key ring from
+     * her apron across the counter, then stands still again. Once; if a line got in the way, the
+     * next try (walking up or asking) does it.
+     */
+    function vierkaGivesKeys(): void {
+      if (s.keys || s.giving) return;
+      s.giving = true;
+      void soloWhenFree(async () => {
+        if (s.keys) return;
+        if (pub.vierka) pub.vierka.frozen = false;
+        s.keySlide = 0;
+        await say('v_keys');
+        s.keySlide = -1;
+        s.keys = true;
+        game.flags.put('pub.keys');
+        if (pub.vierkaKeys) pub.vierkaKeys.visible = false;
+        game.synth.click(pub.vierkaSpot, 3200, 0.12);
+        await game.clock.wait(0.4);
+        if (pub.vierka) pub.vierka.frozen = true;
+        await say('t_keys');
+      }).finally(() => {
+        s.giving = false;
+      });
+    }
+    const keysOnApron = pub.vierkaKeys?.position.clone() ?? new Vector3();
+    /** On the counter in front of her, in her space (she faces +z; the counter's front edge). */
+    const keysOnCounter = new Vector3(keysOnApron.x, 1.09, 1.0);
     async function solo(fn: () => Promise<void>): Promise<void> {
       if (s.busy) return;
       s.busy = true;
@@ -974,6 +999,15 @@ const reality: RealityModule = {
               s.r2LineAt = game.clock.time + 6;
               void solo(() => say('e_loop'));
             }
+          }
+          // come to the bar in front of Vierka and she hands you the keys
+          if (!s.keys && !s.giving && Math.hypot(p.x - pub.vierkaSpot.x, p.z - pub.vierkaSpot.z) < 2.4)
+            vierkaGivesKeys();
+          if (s.keySlide >= 0 && pub.vierkaKeys) {
+            s.keySlide = Math.min(1, s.keySlide + dt / 0.8);
+            const k = s.keySlide * s.keySlide * (3 - 2 * s.keySlide);
+            pub.vierkaKeys.position.lerpVectors(keysOnApron, keysOnCounter, k);
+            pub.vierkaKeys.rotation.x = (-Math.PI / 2) * k; // from hanging to lying on the counter
           }
           // you hear them move
           for (const w of watchers) {

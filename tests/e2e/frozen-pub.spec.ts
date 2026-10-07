@@ -113,3 +113,24 @@ test('a blackout in the frozen pub wakes you by Ežo, not in a loop in the WC', 
   expect(moved).toBe(true);
   expect(errors, errors.join('\n')).toHaveLength(0);
 });
+
+test('Vierka hands you the keys when you come to the bar', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop');
+  test.setTimeout(240_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('./#r1:frozen&test&q=low&seed=5');
+  await page.waitForFunction(() => (window as unknown as { __mf42: Api }).__mf42?.ready === true, null, {
+    timeout: 180_000,
+  });
+  const a = mf(page);
+  await a.sim(0.5);
+  expect((await a.info()).flags['pub.keys'] ?? 0).toBe(0);
+
+  // stand at the counter in front of her and do nothing else: she gives them to you
+  await a.teleport(-1.4, -2.0, 0);
+  const subtitle = () => page.evaluate(() => document.querySelector('.subtitles')?.textContent ?? '');
+  expect(await until(page, async () => (await subtitle()).includes('Kľúče? Na'), 25, 0.25)).toBe(true);
+  expect(await until(page, async () => ((await a.info()).flags['pub.keys'] ?? 0) === 1, 10, 0.25)).toBe(true);
+  expect(errors, errors.join('\n')).toHaveLength(0);
+});

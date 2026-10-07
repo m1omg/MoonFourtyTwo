@@ -33,7 +33,7 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
 | id  | title                 | threat (rule)                                                                     | progress                                                                        |
 | --- | --------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | r1  | Piváreň U Kolesa      | none                                                                              | rounds with Ežo → glyph over the WC → WC knocking → swap                        |
-| r2  | (same module, frozen) | Jano and Fero move when unobserved (`Watcher`)                                    | sit with Ežo → keys from Vierka's apron → front door → r3                       |
+| r2  | (same module, frozen) | Jano and Fero move when unobserved (`Watcher`)                                    | sit with Ežo → Vierka hands you the keys at the bar → front door → r3           |
 | r3  | Nekonečná piváreň     | waitress (`Staff`): ignores seated guests with a glass                            | Ežo's table (lighter, Horský čaj) → SKLAD door at ≥ 1.0 ‰ or reveal             |
 | r4  | Pivnica a kotolňa     | `Hisser` hunts by sound; steam stuns it                                           | logbook → valves end-beginning-middle (3-1-2) → pipe                            |
 | r5  | Kúpele                | lifeguard (`Lifeguard`) moves only in water                                       | PREPAD/VÝPUST valves, key from the chair, dive-hall vortex                      |
@@ -81,6 +81,10 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
   beer mat for shot rounds, and Ežo's mug drains as he sips.
 - **Vierka.** She got a procedural apron with a key ring (her generated model has none, but the
   keys are "zo zástery"). The ring hides once taken.
+  - She hands the keys over herself (owner's request, 2026-10-07): walking up to the bar within
+    2.4 m of her (or "Poprosiť Vierku o kľúče") runs `vierkaGivesKeys()`. She unfreezes, looks
+    at you, says `v_keys` (subtitle only), the ring slides onto the counter, you get
+    `pub.keys`, and she freezes again. Tested in `tests/e2e/frozen-pub.spec.ts`.
 
 **Characters (`src/npc/Character.ts`)**
 

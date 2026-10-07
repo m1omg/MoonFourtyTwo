@@ -26,6 +26,8 @@ export const L: Lines = {
   v_hello2: { who: V, text: 'Zase vy dvaja?' },
   v_hello3: { who: V, text: 'Kolesár ťa dnes ešte potrápi, uvidíš.' },
   v_pour: { who: V, text: 'Hneď to bude. Zapíšem vám to.' },
+  /** In the frozen pub, when she hands you the keys (no recording: subtitle only). */
+  v_keys: { who: V, text: 'Kľúče? Na. A už choď.' },
   v_malinovka: { who: V, text: 'Malinovku? Čo ti je, chlapče, nie si chorý?' },
   v_chlieb: { who: V, text: 'Chlieb s masťou a cibuľou. Aby ťa nepoložilo.' },
   v_nothing: { who: V, text: 'Tak mi tu nestoj, keď nič nechceš.' },
