@@ -36,7 +36,6 @@ export const sk = {
   oknoSub: 'Niečo ti chýba. Kus večera.',
   oknoCaught: 'Niečo ťa dostalo.',
   pressToStart: 'Klikni alebo ťukni pre pokračovanie',
-  rotateDevice: 'Otoč zariadenie na šírku',
   clickToLook: 'Klikni do hry, aby si sa mohol rozhliadať',
   warnTitle: 'Upozornenie',
   warnBody:

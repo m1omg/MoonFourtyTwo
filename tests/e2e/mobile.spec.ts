@@ -22,7 +22,7 @@ async function drag(page: Page, from: [number, number], to: [number, number], ho
   await cdp.detach();
 }
 
-test('touch: the stick walks, the right half looks, portrait asks to rotate', async ({ page }, ti) => {
+test('touch: the stick walks, the right half looks, also held upright', async ({ page }, ti) => {
   test.skip(ti.project.name !== 'mobile');
   test.setTimeout(240_000);
   const errors: string[] = [];
@@ -33,7 +33,6 @@ test('touch: the stick walks, the right half looks, portrait asks to rotate', as
   });
   await page.evaluate(() => (window as unknown as W).__mf42.sim(0.5));
   await expect(page.locator('.touch')).toBeVisible();
-  await expect(page.locator('.rotate')).toBeHidden();
 
   // push the stick (left half) forward and keep it there for a second of game time
   const a = await info(page);
@@ -49,8 +48,26 @@ test('touch: the stick walks, the right half looks, portrait asks to rotate', as
   const c = await info(page);
   expect(Math.abs(c.yaw - b.yaw)).toBeGreaterThan(0.1);
 
-  // holding the phone upright: the game asks to turn it
+  // held upright the game goes on: the stick (above the hotbar) still walks, nothing overlaps
   await page.setViewportSize({ width: 412, height: 915 });
-  await expect(page.locator('.rotate')).toBeVisible();
+  await page.evaluate(() => (window as unknown as W).__mf42.frames(2, 60));
+  await expect(page.locator('.touch')).toBeVisible();
+  const boxes = await page.evaluate(() =>
+    [...document.querySelectorAll('.touch .tbtn, .touch .stick-base, .hotbar')].map((e) => {
+      const r = e.getBoundingClientRect();
+      return { name: e.className, l: r.left, t: r.top, r: r.right, b: r.bottom };
+    }),
+  );
+  for (const x of boxes) {
+    expect(x.l, x.name).toBeGreaterThanOrEqual(0);
+    expect(x.r, x.name).toBeLessThanOrEqual(412);
+    for (const y of boxes)
+      if (x !== y)
+        expect(x.r <= y.l || y.r <= x.l || x.b <= y.t || y.b <= x.t, `${x.name} / ${y.name}`).toBe(true);
+  }
+  const d = await info(page);
+  await drag(page, [110, 700], [110, 610], () => page.evaluate(() => (window as unknown as W).__mf42.sim(1)));
+  const e = await info(page);
+  expect(Math.hypot(e.pos[0]! - d.pos[0]!, e.pos[2]! - d.pos[2]!)).toBeGreaterThan(1);
   expect(errors).toEqual([]);
 });

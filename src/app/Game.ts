@@ -215,8 +215,7 @@ export class Game {
     this.input.look.touchSensitivity = 0.0045 * s.touchSensitivity;
     this.input.look.invertY = s.invertY;
     this.input.setBinds(s.keys);
-    this.renderer.camera.fov = s.fov;
-    this.renderer.camera.updateProjectionMatrix();
+    this.renderer.setFov(s.fov);
     this.audio.setVolume('master', s.master);
     this.audio.setVolume('music', s.music);
     this.audio.setVolume('voice', s.voice);
@@ -388,7 +387,7 @@ export class Game {
   }
 
   /**
-   * Phones and tablets play full screen, held sideways: no browser bars to grow and shrink the
+   * Phones and tablets play full screen, held either way: no browser bars to grow and shrink the
    * picture. Needs a tap (call it from one); browsers that cannot do it are simply left alone.
    */
   private goFullscreen(): void {
@@ -398,14 +397,8 @@ export class Game {
     };
     const request = root.requestFullscreen?.bind(root) ?? root.webkitRequestFullscreen?.bind(root);
     if (!request) return;
-    const sideways = () => {
-      const o = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
-      return o?.lock?.('landscape');
-    };
     try {
-      void Promise.resolve(request({ navigationUI: 'hide' }))
-        .then(sideways)
-        .catch(() => undefined);
+      void Promise.resolve(request({ navigationUI: 'hide' })).catch(() => undefined);
     } catch {
       /* not allowed here */
     }

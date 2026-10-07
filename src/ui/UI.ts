@@ -52,7 +52,7 @@ export class UI {
       this.toastEl,
       chapterWrap,
     );
-    this.root.append(this.hud, this.screens, el('div', { class: 'rotate' }, t('rotateDevice')));
+    this.root.append(this.hud, this.screens);
     parent.append(this.root);
     this.setHudVisible(false);
   }

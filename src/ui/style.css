@@ -515,7 +515,7 @@ body {
   /* rest position: bottom-left corner, clear of the hotbar; the centre is the anchor */
   position: absolute;
   left: calc(max(20px, env(safe-area-inset-left)) + 88px);
-  top: calc(100% - max(20px, env(safe-area-inset-bottom)) - 112px);
+  top: calc(100% - max(20px, env(safe-area-inset-bottom)) - 112px - var(--tb-lift, 0px));
   width: 150px;
   height: 150px;
   margin: -75px 0 0 -75px;
@@ -599,24 +599,55 @@ body {
   color: var(--amber);
 }
 
-.rotate {
-  display: none;
+/* the buttons, on a wide screen: a cluster in the bottom-right corner */
+.touch {
+  --tb-right: max(16px, env(safe-area-inset-right));
+  --tb-lift: 0px;
+}
+.touch .tb-act {
+  right: var(--tb-right);
+  bottom: calc(var(--tb-lift) + 120px);
+  width: 84px;
+  height: 84px;
+  font-size: 0.9rem;
+}
+.touch .tb-drink {
+  right: calc(var(--tb-right) + 96px);
+  bottom: calc(var(--tb-lift) + 96px);
+}
+.touch .tb-light {
+  right: calc(var(--tb-right) + 96px);
+  bottom: calc(var(--tb-lift) + 176px);
+}
+.touch .tb-crouch {
+  right: calc(var(--tb-right) + 10px);
+  bottom: calc(var(--tb-lift) + 220px);
+}
+.touch .tb-throw {
+  right: calc(var(--tb-right) + 176px);
+  bottom: calc(var(--tb-lift) + 120px);
+}
+.touch .tb-pause {
+  right: var(--tb-right);
+  top: max(14px, env(safe-area-inset-top));
+  width: 52px;
+  height: 52px;
+  font-size: 0.7rem;
 }
 
+/* held upright: stick and buttons sit above the hotbar, the buttons in two narrow columns, and
+   the subtitles go to the top of the screen */
 @media (orientation: portrait) and (pointer: coarse) {
-  .rotate {
-    display: flex;
-    position: fixed;
-    inset: 0;
-    z-index: 10;
-    background: #000;
-    color: var(--paper);
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 2rem;
-    font-size: 1.3rem;
-    pointer-events: auto;
+  .touch {
+    --tb-lift: 72px;
+  }
+  .touch .tb-throw {
+    right: calc(var(--tb-right) + 96px);
+    bottom: calc(var(--tb-lift) + 256px);
+  }
+  .subtitles {
+    top: calc(max(14px, env(safe-area-inset-top)) + 64px);
+    bottom: auto;
   }
 }
 

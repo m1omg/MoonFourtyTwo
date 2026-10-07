@@ -20,6 +20,7 @@ import { N8AOPostPass } from 'n8ao';
 import { DrunkEffect, WarpEffect } from './post/DrunkEffect.ts';
 import { GradeEffect } from './post/GradeEffect.ts';
 import { ResolutionGovernor } from './resGovernor.ts';
+import { fitFov } from './fov.ts';
 import { PROFILES, type QualityProfile, type QualityTier } from './quality.ts';
 
 /** WebGL renderer + post-processing chain + dynamic resolution. */
@@ -136,6 +137,15 @@ export class GameRenderer {
     this.resize();
   }
 
+  /** Vertical field of view from the settings (a tall screen widens it, see fitFov). */
+  private baseFov = 72;
+
+  setFov(fov: number): void {
+    this.baseFov = fov;
+    this.camera.fov = fitFov(fov, this.camera.aspect);
+    this.camera.updateProjectionMatrix();
+  }
+
   resize(): void {
     const w = Math.max(1, this.canvas.clientWidth || window.innerWidth);
     const h = Math.max(1, this.canvas.clientHeight || window.innerHeight);
@@ -146,6 +156,7 @@ export class GameRenderer {
     this.renderer.setSize(w, h, false);
     this.composer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    this.camera.fov = fitFov(this.baseFov, this.camera.aspect);
     this.camera.updateProjectionMatrix();
   }
 

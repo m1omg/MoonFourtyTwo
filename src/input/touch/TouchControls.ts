@@ -46,8 +46,9 @@ export class TouchControls {
     right.addEventListener('pointerup', this.onLookUp);
     right.addEventListener('pointercancel', this.onLookUp);
 
-    const mk = (label: string, action: Action | null, style: string, onTap?: () => void) => {
-      const b = el('div', { class: 'tbtn', style, role: 'button', 'aria-label': label }, label);
+    // placed by the stylesheet: one layout for a wide screen, one for a phone held upright
+    const mk = (label: string, action: Action | null, place: string, onTap?: () => void) => {
+      const b = el('div', { class: `tbtn ${place}`, role: 'button', 'aria-label': label }, label);
       b.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -57,20 +58,15 @@ export class TouchControls {
       this.root.append(b);
       return b;
     };
-    const R = 'calc(max(16px, env(safe-area-inset-right)) + ';
-    mk(t('touchAction'), 'interact', `right:${R}0px);bottom:120px;width:84px;height:84px;font-size:0.9rem`);
-    mk(t('touchDrink'), 'drink', `right:${R}96px);bottom:96px`);
-    mk(t('touchLight'), 'light', `right:${R}96px);bottom:176px`);
-    this.crouchBtn = mk(t('touchCrouch'), null, `right:${R}10px);bottom:220px`, () => {
+    mk(t('touchAction'), 'interact', 'tb-act');
+    mk(t('touchDrink'), 'drink', 'tb-drink');
+    mk(t('touchLight'), 'light', 'tb-light');
+    this.crouchBtn = mk(t('touchCrouch'), null, 'tb-crouch', () => {
       this.input.toggleCrouch();
       this.crouchBtn.classList.toggle('on', this.input.crouchToggled);
     });
-    mk(t('touchThrow'), 'throw', `right:${R}176px);bottom:120px`);
-    mk(
-      t('touchPause'),
-      'pause',
-      `right:${R}0px);top:calc(max(14px, env(safe-area-inset-top)));width:52px;height:52px;font-size:0.7rem`,
-    );
+    mk(t('touchThrow'), 'throw', 'tb-throw');
+    mk(t('touchPause'), 'pause', 'tb-pause');
     parent.append(this.root);
     this.setVisible(false);
   }
