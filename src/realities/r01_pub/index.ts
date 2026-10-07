@@ -338,13 +338,13 @@ const reality: RealityModule = {
     });
     I.add({
       id: 'stall',
-      pos: new Vector3(-8.35, 1.05, -0.4),
+      pos: new Vector3(-8.2, 1.05, -1.5),
       radius: 0.4,
       prompt: () => (pub.stallDoor.isOpen ? 'Zavrieť' : 'Otvoriť'),
       onUse: () => {
         if (pub.stallDoor.isOpen) pub.stallDoor.close();
         else {
-          pub.stallDoor.open(95);
+          pub.stallDoor.open(90);
           if (s.wcScene === 1) {
             s.wcScene = 2;
             void solo(() => say('t_stall'));

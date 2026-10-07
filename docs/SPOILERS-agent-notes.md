@@ -58,6 +58,12 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
   - New checkpoint `frozenTable`: beside Ežo's table, facing the regulars. The watchers go back
     home and wake after 3 s; the lights stay steady for 9 s.
   - Old saves pointing at `frozen` with `pub.r2talk` set are moved to `frozenTable`.
+- **The WC is furnished** (`wc.ts`): a bowl with a high cistern in the stall, a urinal on the
+  north wall, a washbasin under the mirror, a bin, a drain and a "WC" plate outside, all
+  procedural. The stall grew to x −9…−7.8, z −1.5…0.2. Its 0.7 m door is hinged by the side wall
+  at x −7.85 and opens inwards, clear of the bowl. In the nav, the bowl row and the corner behind
+  the short wall stay blocked, so `stallCells` holds only the three cells in front of the bowl.
+  The basin and urinal cells are blocked too, because entities don't collide with props.
 - **Dropped talks.**
   - `r2Talk` and the glyph remark ran through `solo()`, which silently does nothing while busy.
     Ežo repeats "Neboj sa… Sadni si" back to back near the chair, so sitting mid-line dropped

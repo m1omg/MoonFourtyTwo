@@ -25,6 +25,7 @@ import { Props } from '../../world/props.ts';
 import { Tableware, tallyTexture } from '../../world/objects/tableware.ts';
 import { HockeyTV, WallClock, CanvasPanel } from '../../world/objects/screens.ts';
 import { Door } from '../../world/objects/door.ts';
+import { wcFixtures } from './wc.ts';
 import { Character } from '../../npc/Character.ts';
 import { NavGrid, Area } from '../../sim/ai/nav/NavGrid.ts';
 
@@ -556,13 +557,13 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   b.wall(-9.0, -3.2, -6.0, -3.2, 0, 2.6, wcTiles, 0.2);
   b.wall(-9.0, 0.2, -6.0, 0.2, 0, 2.6, wcTiles, 0.2);
   b.wall(-9.0, -3.2, -9.0, 0.2, 0, 2.6, wcTiles, 0.2);
-  // stall walls
-  b.wall(-7.8, -0.4, -7.8, 0.2, 0, 2.1, darkWood, 0.04);
-  b.wall(-9.0, -0.4, -8.85, -0.4, 0, 2.1, darkWood, 0.04);
-  const stallDoor = new Door(scope, game.world, [-8.85, 0, -0.4], 0, 1.0, 2.0, doorMat, -1, 0.04);
+  // the cubicle: its door is hinged by the side wall and opens inwards, clear of the bowl
+  b.wall(-7.8, -1.5, -7.8, 0.2, 0, 2.1, darkWood, 0.04);
+  b.wall(-9.0, -1.5, -8.55, -1.5, 0, 2.1, darkWood, 0.04);
+  const stallDoor = new Door(scope, game.world, [-7.85, 0, -1.5], Math.PI, 0.7, 2.0, doorMat, 1, 0.04);
   scene.add(stallDoor.pivot);
-  // sink + mirror
-  b.box([-8.2, 0.75, -3.1], [-7.6, 0.85, -2.7], wcTiles);
+  // the bowl and cistern, a urinal, the washbasin under the mirror, the plate outside
+  wcFixtures(scope, scene, b);
   const mirror = new Mesh(
     scope.add(new PlaneGeometry(0.55, 0.75)),
     scope.add(
@@ -633,9 +634,13 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   // the WC's strip along the shared wall touches the room's edge cells: only the doorway connects
   nav.fillRect(-6.5, -3.0, -6.0, 0.0, 0, true);
   nav.fillRect(-6.5, -1.5, -5.5, -1.0, Area.WALK | Area.DOOR);
-  // the stall: in only through its door (see stallCells), never through its side wall
-  nav.fillRect(-8.0, -0.5, -7.5, 0.0, 0, true);
-  nav.fillRect(-9.0, -0.5, -8.0, 0.0, Area.WALK | Area.DOOR, true);
+  // the stall: in only through its door (see stallCells), never through its walls; nobody stands
+  // in the bowl or behind the short wall beside the door
+  nav.fillRect(-8.0, -1.5, -7.5, 0.0, 0, true);
+  nav.fillRect(-9.0, -1.5, -8.0, 0.0, 0, true);
+  // the fixtures in the room: the washbasin and the urinal
+  nav.fillRect(-8.5, -3.0, -7.5, -2.5, 0, true);
+  nav.fillRect(-7.5, -0.5, -7.0, 0.0, 0, true);
   const block = (x0: number, z0: number, x1: number, z1: number) => nav.fillRect(x0, z0, x1, z1, 0, true);
   block(2.4, 2.6, 3.6, 3.9);
   block(-5.0, 1.9, -3.6, 3.3);
@@ -682,7 +687,7 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
     vierkaSpot,
     nav,
     wcDoorCell: nav.toCell(-6.25, -1.25),
-    stallCells: [nav.toCell(-8.75, -0.25), nav.toCell(-8.25, -0.25)],
+    stallCells: [nav.toCell(-8.25, -1.25), nav.toCell(-8.75, -0.75), nav.toCell(-8.25, -0.75)],
     glyph,
     beerStream,
     cellarHatch,
