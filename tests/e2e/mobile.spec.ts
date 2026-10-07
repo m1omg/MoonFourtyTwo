@@ -51,6 +51,7 @@ test('touch: the stick walks, the right half looks, also held upright', async ({
   // held upright the game goes on: the stick (above the hotbar) still walks, nothing overlaps
   await page.setViewportSize({ width: 412, height: 915 });
   await page.evaluate(() => (window as unknown as W).__mf42.frames(2, 60));
+  await page.waitForTimeout(500); // the stick glides up to its new place (a 0.2 s CSS transition)
   await expect(page.locator('.touch')).toBeVisible();
   const boxes = await page.evaluate(() =>
     [...document.querySelectorAll('.touch .tbtn, .touch .stick-base, .hotbar')].map((e) => {
@@ -63,7 +64,10 @@ test('touch: the stick walks, the right half looks, also held upright', async ({
     expect(x.r, x.name).toBeLessThanOrEqual(412);
     for (const y of boxes)
       if (x !== y)
-        expect(x.r <= y.l || y.r <= x.l || x.b <= y.t || y.b <= x.t, `${x.name} / ${y.name}`).toBe(true);
+        expect(
+          x.r <= y.l || y.r <= x.l || x.b <= y.t || y.b <= x.t,
+          `${x.name} / ${y.name}: ${JSON.stringify([x, y])}`,
+        ).toBe(true);
   }
   const d = await info(page);
   await drag(page, [110, 700], [110, 610], () => page.evaluate(() => (window as unknown as W).__mf42.sim(1)));

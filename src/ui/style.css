@@ -636,8 +636,9 @@ body {
 }
 
 /* held upright: stick and buttons sit above the hotbar, the buttons in two narrow columns, and
-   the subtitles go to the top of the screen */
-@media (orientation: portrait) and (pointer: coarse) {
+   the subtitles go to the top of the screen (by shape alone: the touch controls only exist on
+   touch devices anyway, and some of those report a fine pointer) */
+@media (orientation: portrait) {
   .touch {
     --tb-lift: 72px;
   }
