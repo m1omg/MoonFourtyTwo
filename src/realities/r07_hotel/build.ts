@@ -772,7 +772,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
     watcher.root.position.set(wroom.table.x, -0.5 + 0.02, wroom.table.z - 0.7);
     watcher.root.rotation.y = 0;
     scene.add(watcher.root);
-    watcher.holdOnTable(tw.mug(0.6), 0.762, 0.15);
+    watcher.holdOnTable(tw.mug(0.6), 0.762);
   }
   const jg = props.gltf('jano');
   let me: Character | null = null;

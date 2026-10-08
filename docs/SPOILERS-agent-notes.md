@@ -110,6 +110,15 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
 
 **Characters (`src/npc/Character.ts`)**
 
+- **Hands at the table (2026-10-08).** Seated with `armOnTable`, both forearms were turned in
+  ~30°, so the hands crossed: Ežo's left hand lay over his right and in his mug (measured from
+  the skinned vertices: 3 mm apart, fingers 2–4 cm inside the glass). `POSE_SIT_TABLE` (left
+  forearm +6°) and `ARM_REST` (right forearm 8°) keep them ≥ 5 cm apart even mid-gesture;
+  `holdOnTable` reach is 0.18 and the free-hand `mugRest` 0.13/−0.08 (r5), so no fingertip is in
+  the glass. Seated characters without a table keep the old `POSE_SIT`. The cigarette pack moved
+  in front of his left hand (the table is only 0.56 m wide). `root.userData.character` links the
+  scene graph to the Character for probes.
+
 - `armDrop` is measured from the bind pose. Both rigs hold their arms only ~22° out, so the
   fixed 48° A-pose drop buried the arms in the body; this showed on every standing character
   (Vierka, the r3 waitress, Ežo in r4, r6 neighbours, the r9 inspector, the r11 shades).

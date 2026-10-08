@@ -389,7 +389,7 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   }
   const ezoMug = tw.mug(0.6);
   // stands on the table in front of his fist, handle in his fingers; lifts with his hand
-  if (ezo) ezo.holdOnTable(ezoMug, tableTop + 0.004, 0.15);
+  if (ezo) ezo.holdOnTable(ezoMug, tableTop + 0.004);
   const crowdMat = tallyTexture(scope, 3871, 7);
   for (const [x, z] of [
     [-1.1, 2.9],
@@ -413,7 +413,8 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   props.place('bull_head', { pos: [-5.82, 2.05, 0.6], rotY: Math.PI / 2, collide: 'none', scale: 1.3 });
   props.place('dartboard', { pos: [5.86, 1.73, -1.6], rotY: -Math.PI / 2, collide: 'none' });
   props.place('standing_chalkboard_01', { pos: [-2.9, 0, 3.85], rotY: Math.PI * 0.85, shrink: 0.05 });
-  props.place('cigarette_pack', { pos: [2.82, tableTop + 0.004, 3.4], rotY: 0.6, collide: 'none' });
+  // in front of his left hand (the table is only 0.56 m wide: x 2.72…3.28)
+  props.place('cigarette_pack', { pos: [2.85, tableTop + 0.004, 3.17], rotY: 0.6, collide: 'none' });
   // TV in the corner above the bar end
   const tvModel = props.place('Television_01', { pos: [1.95, 2.25, -4.05], rotY: 0, collide: 'none' });
   void tvModel;
