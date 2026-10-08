@@ -179,12 +179,15 @@ export function wcFixtures(scope: RealityCtx['scope'], scene: Scene, b: Builder)
     );
     scope.add(cap.material as Material);
   }
+  // the soap lies in a little wire dish on the wall beside the basin (the rim is too narrow)
+  add(new BoxGeometry(0.12, 0.008, 0.075), chrome, -7.56, 0.976, -3.06);
+  add(new BoxGeometry(0.12, 0.018, 0.006), chrome, -7.56, 0.985, -3.0215);
   const soap = add(
     new BoxGeometry(0.07, 0.022, 0.045),
     new MeshStandardMaterial({ color: 0xe6dfa4, roughness: 0.6 }),
-    -7.72,
-    0.877,
-    -2.86,
+    -7.56,
+    0.991,
+    -3.058,
   );
   scope.add(soap.material as Material);
   b.box([-8.16, 0, -3.1], [-7.64, 0.87, -2.7], null);

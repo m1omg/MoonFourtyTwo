@@ -3,6 +3,7 @@ import type { ItemId } from '../sim/items/items.data.ts';
 import type { Game } from './Game.ts';
 import type { Action } from '../input/actions.ts';
 import { DoubleSide } from 'three';
+import { capsuleReachable, type ReachGrid } from '../sim/physics/reach.ts';
 import type { InstancedMesh, Light, Line, Material, Mesh, Object3D, Points, Sprite, Texture } from 'three';
 
 /** Deterministic hooks for Playwright (`#…&test`). The loop is driven manually. */
@@ -146,6 +147,52 @@ export function installTestApi(game: Game): void {
           out[o.type] = (out[o.type] ?? 0) + 1;
       });
       return out;
+    },
+    /**
+     * Can the player walk from where they stand to (x, z)? A flood fill of the player's capsule
+     * over the real colliders (doors as they are now).
+     */
+    reachable(x: number, z: number, margin = 4): boolean {
+      const c = game.player.cfg;
+      return capsuleReachable(
+        game.world,
+        game.player.pos,
+        { x, z },
+        {
+          radius: c.radius,
+          height: c.standHeight,
+          margin,
+        },
+      );
+    },
+    /**
+     * The same flood fill as a text map (rows by z, columns by x; '#' shut, '.' open but not
+     * reached, 'o' reached, ' ' not looked at), for finding what blocks a way.
+     */
+    reachMap(x: number, z: number, margin = 4): string {
+      const c = game.player.cfg;
+      const out = {} as ReachGrid;
+      capsuleReachable(
+        game.world,
+        game.player.pos,
+        { x, z },
+        {
+          radius: c.radius,
+          height: c.standHeight,
+          margin,
+          out,
+        },
+      );
+      const rows: string[] = [`x0 ${out.x0.toFixed(2)} z0 ${out.z0.toFixed(2)} cell 0.1`];
+      for (let j = 0; j < out.nz; j++) {
+        let row = '';
+        for (let i = 0; i < out.nx; i++) {
+          const k = j * out.nx + i;
+          row += out.seen[k] ? 'o' : out.state[k] === 2 ? '#' : out.state[k] === 1 ? '.' : ' ';
+        }
+        rows.push(row);
+      }
+      return rows.join('\n');
     },
     /** Where an interactable is (null if there is none with that id). */
     where(id: string): [number, number, number] | null {

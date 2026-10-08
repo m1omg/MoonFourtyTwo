@@ -8,6 +8,7 @@ import {
   FogExp2,
   Group,
   HemisphereLight,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -21,6 +22,8 @@ import {
 import type { Object3D, Texture } from 'three';
 import type { RealityCtx } from '../../world/Reality.ts';
 import type { KitMaterial } from '../../world/kit/Builder.ts';
+import { colliderCopy } from '../../world/kit/geometry.ts';
+import type { DynamicBody } from '../../sim/physics/CollisionWorld.ts';
 import { Props } from '../../world/props.ts';
 import { Tableware, tallyTexture } from '../../world/objects/tableware.ts';
 import { HockeyTV, WallClock, CanvasPanel } from '../../world/objects/screens.ts';
@@ -39,12 +42,17 @@ export interface Pub {
   vierkaKeys: Object3D | null;
   jano: Object3D | null;
   fero: Object3D | null;
+  /** What you bump into where the card players sit (moves with them; null without them). */
+  janoBody: DynamicBody | null;
+  feroBody: DynamicBody | null;
   tv: HockeyTV;
   tvLight: PointLight;
   clock: WallClock;
   slot: CanvasPanel;
   jukebox: CanvasPanel;
   neon: CanvasPanel;
+  /** The neon sign's red glow. */
+  neonLight: PointLight;
   frontDoor: Door;
   wcDoor: Door;
   stallDoor: Door;
@@ -273,7 +281,7 @@ export async function buildPub(
       scene.add(bt);
     }
   }
-  props.place('CashRegister_01', { pos: [0.85, 1.1, -2.9], rotY: Math.PI * 0.05, collide: 'none' });
+  props.place('CashRegister_01', { pos: [0.85, 1.1, -3.02], rotY: Math.PI * 0.05, collide: 'none' });
   // beer tap tower
   const chrome = scope.add(new MeshStandardMaterial({ color: 0xdedede, metalness: 1, roughness: 0.18 }));
   const tower = new Mesh(scope.add(new CylinderGeometry(0.05, 0.06, 0.42, 16)), chrome);
@@ -309,10 +317,19 @@ export async function buildPub(
   const playerSeatPos = new Vector3(3.0, 0, 2.42);
   props.place(CHAIR, { pos: [3.0, 0, 2.5], rotY: 0, collide: 'none' });
   props.place(CHAIR, { pos: [3.0, 0, 4.02], rotY: Math.PI, collide: 'none' });
-  props.place('round_wooden_table_01', { pos: [-4.3, 0, 2.6], scale: 0.79 });
+  // round tables get a round collider: the square around the card players' one, together with
+  // them and the stove, walled off the front door
+  const roundTable = (x: number, z: number) => {
+    props.place('round_wooden_table_01', { pos: [x, 0, z], scale: 0.79, collide: 'none' });
+    const g = new CylinderGeometry(0.53, 0.53, 0.79, 12);
+    g.translate(x, 0.395, z);
+    b.addCollider(colliderCopy(g));
+    g.dispose();
+  };
+  roundTable(-4.3, 2.6);
   props.place('WoodenTable_03', { pos: [-1.0, 0, 2.6], rotY: Math.PI / 2 });
   props.place('WoodenTable_03', { pos: [-1.2, 0, -0.5], rotY: 0 });
-  props.place('round_wooden_table_01', { pos: [2.6, 0, -0.6], scale: 0.79 });
+  roundTable(2.6, -0.6);
   for (const [x, z, r] of [
     [-1.0, 1.85, 0],
     [-1.0, 3.35, Math.PI],
@@ -359,19 +376,21 @@ export async function buildPub(
     vierka.root.add(apron.root);
     vierkaKeys = apron.keys;
   }
-  const regularsCollide = opts.regulars === false ? 'none' : 'box';
-  const jano = props.place('jano', {
-    pos: [-4.85, 0, 2.15],
-    rotY: Math.PI * 0.2,
-    collide: regularsCollide,
-    shrink: 0.1,
-  });
-  const fero = props.place('fero', {
-    pos: [-3.75, 0, 3.05],
-    rotY: Math.PI + Math.PI * 0.2,
-    collide: regularsCollide,
-    shrink: 0.1,
-  });
+  // the card players: not a static box each (where they sit is not where they stay, and a box
+  // round the whole figure closed the way to the front door and hid them from your own eyes) but
+  // a body about their size that goes where they go and that sight passes through
+  const jano = props.place('jano', { pos: [-4.85, 0, 2.15], rotY: Math.PI * 0.2, collide: 'none' });
+  const fero = props.place('fero', { pos: [-3.75, 0, 3.05], rotY: Math.PI * 1.2, collide: 'none' });
+  const regularBody = (o: Object3D | null): DynamicBody | null => {
+    if (!o || opts.regulars === false) return null;
+    const g = scope.add(new BoxGeometry(0.6, 1.2, 0.6));
+    g.translate(0, 0.6, 0);
+    const body = game.world.addDynamic(g, new Matrix4().makeTranslation(o.position.x, 0, o.position.z));
+    body.sight = false;
+    return body;
+  };
+  const janoBody = regularBody(jano);
+  const feroBody = regularBody(fero);
 
   // glasses on tables
   const ourMat = tallyTexture(scope, 3, 1);
@@ -399,16 +418,17 @@ export async function buildPub(
   // stands on the table in front of his fist, handle in his fingers; lifts with his hand
   if (ezo) ezo.holdOnTable(ezoMug, tableTop + 0.004);
   const crowdMat = tallyTexture(scope, 3871, 7);
-  for (const [x, z] of [
-    [-1.1, 2.9],
-    [2.4, -0.4],
-    [-4.1, 2.45],
-  ] as Array<[number, number]>) {
+  const roundTop = tableTop - 0.04;
+  for (const [x, z, top] of [
+    [-1.1, 2.9, tableTop], // the long table
+    [2.4, -0.4, roundTop],
+    [-4.1, 2.45, roundTop],
+  ] as Array<[number, number, number]>) {
     const m = tw.mat(crowdMat.tex);
-    m.position.set(x, tableTop - 0.04 + 0.002, z);
+    m.position.set(x, top + 0.002, z);
     scene.add(m);
     const mug = tw.mug(0.15);
-    mug.position.set(x + 0.1, tableTop - 0.04 + 0.004, z + 0.08);
+    mug.position.set(x + 0.1, top + 0.004, z + 0.08);
     scene.add(mug);
   }
 
@@ -420,7 +440,13 @@ export async function buildPub(
   scene.add(stoveGlow);
   props.place('bull_head', { pos: [-5.82, 2.05, 0.6], rotY: Math.PI / 2, collide: 'none', scale: 1.3 });
   props.place('dartboard', { pos: [5.86, 1.73, -1.6], rotY: -Math.PI / 2, collide: 'none' });
-  props.place('standing_chalkboard_01', { pos: [-2.9, 0, 3.85], rotY: Math.PI * 0.85, shrink: 0.05 });
+  // the menu board stands against the wall beside the front door, facing the room (it used to
+  // stand right in the way in), with a collider of its own shape rather than a square round it
+  const chalk = { x: -2.2, z: 3.95, rotY: Math.PI + 0.12 };
+  props.place('standing_chalkboard_01', { pos: [chalk.x, 0, chalk.z], rotY: chalk.rotY, collide: 'none' });
+  b.box([chalk.x - 0.44, 0, chalk.z - 0.36], [chalk.x + 0.44, 1.5, chalk.z + 0.36], null, {
+    rotY: chalk.rotY,
+  });
   // in front of his left hand (the table is only 0.56 m wide: x 2.72…3.28)
   props.place('cigarette_pack', { pos: [2.85, tableTop + 0.004, 3.17], rotY: 0.6, collide: 'none' });
   // TV in the corner above the bar end
@@ -656,6 +682,9 @@ export async function buildPub(
     doorWood.uvScale,
   );
   scene.add(frontDoor.pivot);
+  // a wooden sill across the doorway (the pub's floor ends at the wall's middle, the pavement
+  // starts at its outer face: a dark slit lay between them)
+  b.box([frontDoorX - 0.5, -0.2, 4.4], [frontDoorX + 0.5, 0.008, 4.64], trim, { walkSurface: true });
 
   // window figure (outside, under the lamp across the street) and the TV-only figure (R2)
   const shadowMat = scope.add(new MeshStandardMaterial({ color: 0x050505, roughness: 1 }));
@@ -715,8 +744,10 @@ export async function buildPub(
   block(-1.9, -1.0, -0.5, 0.0);
   block(1.9, -1.3, 3.3, 0.1);
   block(-5.8, 3.4, -4.7, 4.3);
-  block(-3.4, 3.4, -2.4, 4.3); // chalkboard
+  block(-2.9, 3.5, -1.75, 4.4); // the menu board
   block(5.3, -4.4, 5.9, 1.3);
+  // the strip along the bar with its stools (they were walked through)
+  block(-5.8, -2.45, 5.8, -2.05);
 
   return {
     props,
@@ -726,12 +757,15 @@ export async function buildPub(
     vierkaKeys,
     jano,
     fero,
+    janoBody,
+    feroBody,
     tv,
     tvLight,
     clock,
     slot,
     jukebox,
     neon,
+    neonLight,
     frontDoor,
     wcDoor,
     stallDoor,

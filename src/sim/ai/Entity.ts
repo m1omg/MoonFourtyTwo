@@ -24,6 +24,8 @@ export abstract class Entity {
   protected pathIdx = 0;
   protected repath = 0;
   private lastTarget = new Vector3(Infinity, 0, 0);
+  /** The grid's version the path was planned on (a door that shut since makes it stale). */
+  private pathNav = -1;
 
   constructor(
     readonly id: string,
@@ -75,10 +77,16 @@ export abstract class Entity {
     let wz = target.z;
     if (ctx.nav) {
       this.repath -= dt;
-      if (!this.path || this.repath <= 0 || this.lastTarget.distanceToSquared(target) > 0.5) {
+      if (
+        !this.path ||
+        this.repath <= 0 ||
+        this.pathNav !== ctx.nav.version ||
+        this.lastTarget.distanceToSquared(target) > 0.5
+      ) {
         this.path = ctx.nav.findPath(this.pos.x, this.pos.z, target.x, target.z, this.navMask);
         this.pathIdx = 1;
         this.repath = 0.6;
+        this.pathNav = ctx.nav.version;
         this.lastTarget.copy(target);
       }
       if (this.path === null) {

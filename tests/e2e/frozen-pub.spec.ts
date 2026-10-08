@@ -105,10 +105,11 @@ test('a blackout in the frozen pub wakes you by Ežo, not in a loop in the WC', 
   expect(await a.mode()).toBe('play');
   for (const e of (await a.info()).entities)
     expect(Math.hypot(e.pos[0]! + 4.3, e.pos[2]! - 2.6)).toBeLessThan(1.5);
-  // step away (and keep looking away): they come again, slowly
+  // step away (and keep looking away): they come again, slowly (in steps, as frames would: the
+  // scripts that wake them go on between them)
   await a.teleport(1.0, 0.2);
   await a.aim(1.0, 1.5, 8);
-  await a.sim(3);
+  for (let i = 0; i < 6; i++) await a.sim(0.5);
   const moved = (await a.info()).entities.some((e) => Math.hypot(e.pos[0]! + 4.3, e.pos[2]! - 2.6) > 1.6);
   expect(moved).toBe(true);
   expect(errors, errors.join('\n')).toHaveLength(0);
@@ -129,10 +130,29 @@ test('you ask Vierka for the keys at the bar, and a blackout later does not take
   const a = mf(page);
   await a.sim(0.5);
   expect((await a.info()).flags['pub.keys'] ?? 0).toBe(0);
-
-  // stand at the counter in front of her and do nothing else: you ask, she gives them to you
-  await a.teleport(-1.4, -2.0, 0);
   const subtitle = () => page.evaluate(() => document.querySelector('.subtitles')?.textContent ?? '');
+
+  // not before Ežo has told you how things stand here
+  await a.teleport(-1.4, -2.0, 0);
+  await a.sim(2);
+  expect((await a.info()).flags['pub.keys'] ?? 0).toBe(0);
+  expect(await a.use('keys')).toBe(false);
+  await a.teleport(3.0, 2.0, Math.PI);
+  expect(await until(page, async () => (await subtitle()).includes('Sadni si'), 20, 0.25)).toBe(true);
+  expect(await a.use('seat2')).toBe(true);
+  expect(await until(page, async () => ((await a.info()).flags['pub.r2talk'] ?? 0) === 1, 60)).toBe(true);
+  await page.evaluate(() => {
+    const m = (window as unknown as { __mf42: Api & { move(x: number, y: number): void } }).__mf42;
+    m.move(0, -1);
+    m.sim(0.3);
+    m.move(0, 0);
+    m.sim(0.2);
+  });
+
+  // stand at the counter in front of her (keeping an eye on the two) and do nothing else: you
+  // ask, she gives them to you
+  await a.teleport(-1.4, -2.0, 0);
+  await a.aim(-4.3, 1.0, 2.6);
   expect(await until(page, async () => ((await a.info()).flags['pub.keys'] ?? 0) === 1, 2, 0.1)).toBe(true);
   expect(await until(page, async () => (await subtitle()).includes('kľúče od dverí'), 25, 0.25)).toBe(true);
   expect(await until(page, async () => (await subtitle()).includes('A už choď'), 15, 0.25)).toBe(true);

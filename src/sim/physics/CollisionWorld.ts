@@ -24,6 +24,11 @@ export interface DynamicBody {
   layer: number;
   /** Bounding box in world space (refresh with updateBounds after moving). */
   worldBox: Box3;
+  /**
+   * False: the body only stops capsules and lets rays through (a seated figure: the point where
+   * you look at him must not be hidden by his own body).
+   */
+  sight: boolean;
 }
 
 const _box = new Box3();
@@ -67,6 +72,7 @@ export class CollisionWorld {
       enabled: true,
       layer,
       worldBox: new Box3(),
+      sight: true,
     };
     this.updateDynamic(body, matrix);
     this.dynamics.push(body);
@@ -169,7 +175,7 @@ export class CollisionWorld {
       if (hit && hit.distance < best) best = hit.distance;
     }
     for (const body of this.dynamics) {
-      if (!body.enabled || !(body.layer & mask)) continue;
+      if (!body.enabled || !body.sight || !(body.layer & mask)) continue;
       _inv.copy(body.inverse);
       const localRay = _ray.clone().applyMatrix4(_inv);
       const hit = body.bvh.raycastFirst(localRay, DoubleSide);

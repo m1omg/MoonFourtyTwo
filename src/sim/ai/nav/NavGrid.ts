@@ -13,6 +13,8 @@ export const Area = {
 
 export class NavGrid {
   readonly flags: Uint8Array;
+  /** Bumped whenever `set` changes a cell (a door shut): paths planned before are stale. */
+  version = 0;
 
   constructor(
     readonly width: number,
@@ -33,7 +35,11 @@ export class NavGrid {
   }
 
   set(cx: number, cz: number, flags: number): void {
-    if (this.inBounds(cx, cz)) this.flags[this.idx(cx, cz)] = flags;
+    if (!this.inBounds(cx, cz)) return;
+    const i = this.idx(cx, cz);
+    if (this.flags[i] === flags) return;
+    this.flags[i] = flags;
+    this.version++;
   }
 
   get(cx: number, cz: number): number {

@@ -1,4 +1,4 @@
-import { PerspectiveCamera, Vector3, WebGLRenderTarget } from 'three';
+import { Matrix4, PerspectiveCamera, Vector3, WebGLRenderTarget } from 'three';
 import type { Object3D, MeshBasicMaterial } from 'three';
 import type { RealityModule, RealityInstance } from '../../world/Reality.ts';
 import { buildPub, drawJukebox, drawSlot, type Pub } from './build.ts';
@@ -12,6 +12,7 @@ import { Watcher } from '../../sim/ai/behaviors/Watcher.ts';
 import { MusicBox, TUNES } from '../../audio/procedural/musicbox.ts';
 import { BAC_DRUNK } from '../../sim/status/Intoxication.ts';
 import { clamp } from '../../core/damp.ts';
+import { comfort } from '../../render/comfort.ts';
 import { Cancelled, runScript } from '../../sim/narrative/ScriptRunner.ts';
 import { placeBeerMat } from '../../world/objects/beermats.ts';
 import { setMugFill } from '../../world/objects/tableware.ts';
@@ -35,6 +36,8 @@ async function line(game: Game, pub: Pub, id: string): Promise<void> {
 const TV_LAYER = 3;
 /** Yaw that looks from Ežo's table across the room to the regulars' table. */
 const FACE_REGULARS = Math.atan2(-(-4.3 - 2.2), -(2.6 - 2.3));
+/** The WC door's hinge (its leaf swings 0.9 m into the WC from here). */
+const WC_HINGE = { x: -6.0, z: -0.75 };
 
 const reality: RealityModule = {
   id: 'r1',
@@ -88,12 +91,21 @@ const reality: RealityModule = {
       keys: game.flags.has('pub.keys'),
       /** 0..1 while the key ring slides from her apron onto the counter; -1 otherwise. */
       keySlide: -1,
+      /** Seconds since you last stepped into (or out of) the WC. */
+      wcInFor: 0,
+      /** When you last opened the WC door yourself (it doesn't shut in your face right after). */
+      wcDoorOpenedAt: -Infinity,
+      /** The line on first seeing the frozen pub is waiting for its turn. */
+      frozenLine: false,
+      /** On the way out through the front door (nothing may stop or repeat that). */
+      leaving: false,
     };
     pub.ourMat.draw(s.tallies);
     if (s.keys && pub.vierkaKeys) pub.vierkaKeys.visible = false;
 
     const cam = game.renderer.camera;
     const eyeVec = new Vector3();
+    const bodyAt = new Matrix4();
 
     // ───────── seating ─────────
     const sitDown = () => {
@@ -282,6 +294,8 @@ const reality: RealityModule = {
       id: 'hatch',
       pos: pub.cellarHatch.position.clone(),
       radius: 0.4,
+      // it lies behind the bar: the counter is always between it and your eyes
+      ignoreOcclusion: true,
       prompt: 'Otvoriť poklop',
       onUse: () =>
         void solo(async () => {
@@ -325,6 +339,7 @@ const reality: RealityModule = {
       pos: new Vector3(-4.2, 1.05, 4.5),
       radius: 0.45,
       prompt: () => (pub.frontDoor.isOpen ? 'Zavrieť' : 'Otvoriť'),
+      enabled: () => !s.leaving,
       onUse: () => void frontDoor(),
     });
     I.add({
@@ -345,7 +360,7 @@ const reality: RealityModule = {
           pub.stallDoor.open(90);
           if (s.wcScene === 1) {
             s.wcScene = 2;
-            void solo(() => say('t_stall'));
+            void soloWhenFree(() => say('t_stall'));
           }
         }
       },
@@ -359,7 +374,8 @@ const reality: RealityModule = {
       range: 3.5,
       ignoreOcclusion: true,
       prompt: 'Vypýtať si od Vierky kľúče',
-      enabled: () => s.phase === 'r2' && !s.keys,
+      // only once Ežo has told you how things stand here (and that the keys are with her)
+      enabled: () => s.phase === 'r2' && !s.keys && s.r2Talked,
       onUse: () => vierkaGivesKeys(),
     });
     for (const [id, item, count, x] of [
@@ -385,10 +401,13 @@ const reality: RealityModule = {
     // ───────── helpers ─────────
     let roundItem: ItemId | null = null;
     const hasRound = () => roundItem !== null && game.inventory.count(roundItem) > 0;
-    /** Like solo, but lets a line in progress finish first instead of dropping `fn`. */
+    /**
+     * Like solo, but lets a line in progress finish first instead of dropping `fn`. A queue: when
+     * several wait, the first to get the free moment plays and the others wait for the next one.
+     */
     async function soloWhenFree(fn: () => Promise<void>): Promise<void> {
       try {
-        await game.clock.until(() => !s.busy, 15);
+        while (s.busy) await game.clock.until(() => !s.busy);
       } catch (e) {
         if (!(e instanceof Cancelled)) console.error(e);
         return;
@@ -402,18 +421,25 @@ const reality: RealityModule = {
      * out as soon as nobody else is talking.
      */
     function vierkaGivesKeys(): void {
-      if (s.keys) return;
+      if (s.keys || !s.r2Talked) return;
       s.keys = true;
       game.flags.put('pub.keys');
       game.saveCheckpoint(game.checkpoint);
-      game.ui.toast('Kľúče od krčmy');
+      let given = false;
+      const gen = game.clock.gen;
+      const handOver = () => {
+        if (given || gen !== game.clock.gen) return;
+        given = true;
+        if (pub.vierkaKeys) pub.vierkaKeys.visible = false;
+        game.ui.toast('Kľúče od krčmy');
+      };
       void soloWhenFree(async () => {
         if (pub.vierka) pub.vierka.frozen = false;
         await say('t_ask_keys');
         s.keySlide = 0;
         await say('v_keys');
         s.keySlide = -1;
-        if (pub.vierkaKeys) pub.vierkaKeys.visible = false;
+        handOver();
         game.synth.click(pub.vierkaSpot, 3200, 0.12);
         await game.clock.wait(0.4);
         if (pub.vierka) pub.vierka.frozen = true;
@@ -421,7 +447,7 @@ const reality: RealityModule = {
       }).finally(() => {
         if (pub.vierka) pub.vierka.frozen = true;
         s.keySlide = -1;
-        if (pub.vierkaKeys) pub.vierkaKeys.visible = false;
+        handOver();
       });
     }
     const keysOnApron = pub.vierkaKeys?.position.clone() ?? new Vector3();
@@ -616,17 +642,21 @@ const reality: RealityModule = {
     async function frontDoor(): Promise<void> {
       const d = pub.frontDoor;
       if (s.phase === 'r2') {
+        if (s.leaving) return;
         if (!s.keys) {
           await solo(() => say('t_door_closed'));
           return;
         }
-        // out you go: nothing in here gets you any more (their table is right by the door)
+        // out you go: nothing in here gets you any more (their table is right by the door), and
+        // nothing wakes them again or puts the lights out while you go
+        s.leaving = true;
         for (const w of watchers) w.awake = false;
         s.lightsOff = false;
         s.flickerAt = Infinity;
         d.locked = false;
         d.open(90);
-        await solo(async () => {
+        // the chapter's last line: whatever is being said ends first, this one is never dropped
+        await soloWhenFree(async () => {
           await say('t_door_open');
           await game.clock.wait(0.6);
         });
@@ -647,11 +677,13 @@ const reality: RealityModule = {
         return;
       }
       d.open(95);
-      if (s.swapped && s.phase === 'r2' && !game.flags.has('pub.frozenSeen')) {
-        game.flags.put('pub.frozenSeen');
-        void solo(async () => {
+      s.wcDoorOpenedAt = game.clock.time;
+      if (s.swapped && s.phase === 'r2' && !game.flags.has('pub.frozenSeen') && !s.frozenLine) {
+        s.frozenLine = true;
+        void soloWhenFree(async () => {
           await game.clock.wait(1.2);
           await say('t_frozen');
+          game.flags.put('pub.frozenSeen');
         });
       }
     }
@@ -672,10 +704,12 @@ const reality: RealityModule = {
     const makeWatcher = (id: string, obj: Object3D | null) => {
       if (!obj) return null;
       const w = new Watcher(id);
-      w.place(obj.position.x, 0, obj.position.z, obj.rotation.y);
+      // (the entity faces -z at yaw 0, the figure +z)
+      w.place(obj.position.x, 0, obj.position.z, obj.rotation.y + Math.PI);
       w.home.copy(w.pos);
       w.canBeSeen = () => !s.lightsOff;
-      w.headHeight = 1.0;
+      // they sit: the head is about here (looking at it is looking at him)
+      w.headHeight = 1.15;
       w.others = watchers;
       // each time they get you they come a little slower (down to about the story pace)
       const ease = Math.max(0.6, 0.85 ** game.caughtHere);
@@ -706,9 +740,13 @@ const reality: RealityModule = {
       s.phase = 'r2';
       game.flags.put('pub.r2');
       music.stop();
+      s.jukebox = -1;
+      drawJukebox(pub.jukebox, -1, 0);
       stoppers.splice(0).forEach((f) => f());
       if (pub.ezo) pub.ezo.frozen = false;
       if (pub.vierka) {
+        // posed as she stood (after a reload she had never been posed: arms out, head straight)
+        pub.vierka.update(0, 0);
         pub.vierka.frozen = true;
       }
       pub.beerStream.visible = true;
@@ -719,6 +757,7 @@ const reality: RealityModule = {
       pub.wcSconce.color.setHex(0xcfe0ff);
       for (const l of pub.streetLights) l.intensity = 0;
       pub.neon.mesh.visible = false;
+      pub.neonLight.intensity = 0;
       pub.windowFigure.visible = false;
       stoppers.push(game.synth.hum(0.05));
       stoppers.push(
@@ -741,10 +780,22 @@ const reality: RealityModule = {
       }
       s.lightsOff = false;
       s.flickerAt = game.clock.time + seconds + 6;
-      runScript(async () => {
+      void runScript(async () => {
         await game.clock.wait(seconds);
-        if (s.phase === 'r2' && s.r2Talked) for (const w of watchers) w.awake = true;
+        await wakeWhenClear();
       });
+    }
+
+    /**
+     * The regulars wake only once you are a few steps from both of them: never right beside you
+     * (you may have walked over to look at them while Ežo was talking), never on your way out.
+     */
+    async function wakeWhenClear(): Promise<void> {
+      const p = game.player.pos;
+      await game.clock.until(
+        () => s.leaving || watchers.every((w) => Math.hypot(w.pos.x - p.x, w.pos.z - p.z) >= 3),
+      );
+      if (s.phase === 'r2' && s.r2Talked && !s.leaving) for (const w of watchers) w.awake = true;
     }
 
     async function r2Talk(): Promise<void> {
@@ -758,7 +809,7 @@ const reality: RealityModule = {
         await say('e_r2_5');
         s.r2Talked = true;
         game.flags.put('pub.r2talk');
-        for (const w of watchers) w.awake = true;
+        void runScript(wakeWhenClear);
         s.flickerAt = game.clock.time + 5;
         // a blackout from here on wakes you by Ežo's table, not locked in the WC
         game.saveCheckpoint('frozenTable');
@@ -853,7 +904,9 @@ const reality: RealityModule = {
               game.synth.clink(new Vector3(3.0, 1.0, 3.2), 1);
               ezoSip();
               game.ui.toast(
-                game.touch ? 'Ťukni na „Piť"' : 'Stlač Q (alebo pravé tlačidlo myši) a napi sa',
+                game.touch
+                  ? 'Ťukni na „Piť"'
+                  : `Stlač ${game.keyLabel('drink')} (alebo pravé tlačidlo myši) a napi sa`,
                 4500,
               );
               const drank = () => game.inventory.count('pivo') === 0;
@@ -868,7 +921,9 @@ const reality: RealityModule = {
               await say('e_order1');
               await say('e_order2');
               game.flags.put('pub.intro');
-              game.ui.toast(game.touch ? 'Pohni sa a vstaneš' : 'Vstaneš pohybom (WASD)', 4000);
+              const moveKeys = (['forward', 'left', 'back', 'right'] as const).map((k) => game.keyLabel(k));
+              const keys = moveKeys.every((k) => k.length === 1) ? moveKeys.join('') : moveKeys.join(', ');
+              game.ui.toast(game.touch ? 'Pohni sa a vstaneš' : `Vstaneš pohybom (${keys})`, 4000);
               s.lastRoundAt = game.clock.time;
             }
           } catch (e) {
@@ -883,11 +938,19 @@ const reality: RealityModule = {
         pub.frontDoor.step(dt);
         pub.wcDoor.step(dt);
         pub.stallDoor.step(dt);
-        // nobody walks through the closed WC door
+        // nobody walks through the closed WC door (nor one that is shutting: the moment it starts to)
+        const passable = (d: typeof pub.wcDoor) => d.target > 0 && d.angle > 45;
         const [dcx, dcz] = pub.wcDoorCell;
-        pub.nav.set(dcx, dcz, pub.wcDoor.isOpen || pub.wcDoor.moving ? Area.WALK | Area.DOOR : 0);
-        const stallOpen = pub.stallDoor.isOpen || pub.stallDoor.moving;
+        pub.nav.set(dcx, dcz, passable(pub.wcDoor) ? Area.WALK | Area.DOOR : 0);
+        const stallOpen = passable(pub.stallDoor);
         for (const [x, z] of pub.stallCells) pub.nav.set(x, z, stallOpen ? Area.WALK | Area.DOOR : 0);
+        // what you bump into goes where the card players go
+        for (const [w, body] of [
+          [wJano, pub.janoBody],
+          [wFero, pub.feroBody],
+        ] as const) {
+          if (w && body) game.world.updateDynamic(body, bodyAt.makeTranslation(w.pos.x, 0, w.pos.z));
+        }
         if (s.ezoDrinkT > 0) {
           s.ezoDrinkT -= dt;
           if (s.ezoDrinkT <= 0) pub.ezo?.stopDrink();
@@ -953,23 +1016,30 @@ const reality: RealityModule = {
               void solo(() => say('t_loop'));
             }
           }
-          // the WC sequence
+          // the WC sequence: once Ežo has pointed you there, the door shuts behind you a moment
+          // after you are in (again, if it gets opened: never on you in the doorway, never right
+          // after you opened it yourself), something knocks in the cubicle, and opening the
+          // cubicle (or just waiting in the shut WC) moves things on
           const inWc = p.x < -6.15 && p.z < 0.2 && p.z > -3.2;
-          if (inWc && !s.inWc) {
-            s.inWc = true;
-            if (s.glyphShown && s.wcScene === 0) {
+          if (inWc !== s.inWc) {
+            s.inWc = inWc;
+            s.wcInFor = 0;
+          } else s.wcInFor += dt;
+          if (s.glyphShown && !s.swapped && inWc && s.wcInFor > 1.2) {
+            const d = pub.wcDoor;
+            const clear = Math.hypot(p.x - WC_HINGE.x, p.z - WC_HINGE.z) > 1.3;
+            if (d.isOpen && !d.moving && clear && game.clock.time - s.wcDoorOpenedAt > 2.5) d.close();
+            if (s.wcScene === 0 && d.target === 0) {
               s.wcScene = 1;
-              void (async () => {
-                await game.clock.wait(1.2);
-                pub.wcDoor.close();
+              void runScript(async () => {
                 for (let i = 0; i < 3; i++) {
                   game.synth.click(new Vector3(-8.4, 1.2, -0.1), 160, 0.5);
                   await game.clock.wait(0.45);
                 }
-                await solo(() => say('t_knock'));
-              })();
+                await soloWhenFree(() => say('t_knock'));
+              });
             }
-          } else if (!inWc && s.inWc) s.inWc = false;
+          }
           if (s.wcScene >= 1 && !s.swapped && s.inWc && !pub.wcDoor.isOpen && !pub.wcDoor.moving) {
             s.wcTimer += dt;
             if (s.wcScene === 2 || s.wcTimer > 12) swapToFrozen();
@@ -1022,7 +1092,7 @@ const reality: RealityModule = {
             creakAt.set(w, game.clock.time);
             game.synth.creak(w.pos.clone().setY(0.6), 0.35, 0.07);
           }
-          if (s.r2Talked && game.clock.time > s.flickerAt) {
+          if (s.r2Talked && !s.leaving && game.clock.time > s.flickerAt) {
             s.lightsOff = !s.lightsOff;
             s.flickerAt =
               game.clock.time + (s.lightsOff ? 0.35 + game.rng.next() * 0.25 : 5 + game.rng.next() * 6);
@@ -1031,7 +1101,7 @@ const reality: RealityModule = {
         }
       },
 
-      frame(dt, _alpha, t) {
+      frame(dt, alpha, t) {
         pub.tv.update(t);
         const tvOn = s.phase === 'r1';
         pub.tvLight.intensity = tvOn ? 0.4 + pub.tv.light * 0.6 : 0.5;
@@ -1055,28 +1125,30 @@ const reality: RealityModule = {
         // slot machine reels
         if (s.slotSpin > 0) drawSlot(pub.slot, s.slotReels, t);
         if (s.jukebox >= 0) drawJukebox(pub.jukebox, s.jukebox, t);
-        // lamps flicker in the frozen pub
-        const off = s.lightsOff;
-        for (const l of pub.lampLights) l.intensity = off ? 0 : s.phase === 'r2' ? 1.6 : 3.0;
-        pub.wcSconce.intensity = off ? 0 : s.phase === 'r2' ? 0.5 : 0.9;
-        for (const m of pub.lampMeshes) m.visible = !off;
-        pub.barLight.intensity = off ? 0 : s.phase === 'r2' ? 1.8 : 3.2;
-        // entities: watchers move the regulars' meshes
-        if (wJano && pub.jano) {
-          pub.jano.position.set(wJano.pos.x, 0, wJano.pos.z);
-          if (s.phase === 'r2' && wJano.state !== 'frozen')
-            pub.jano.rotation.y = Math.atan2(
-              game.player.pos.x - wJano.pos.x,
-              game.player.pos.z - wJano.pos.z,
-            );
-        }
-        if (wFero && pub.fero) {
-          pub.fero.position.set(wFero.pos.x, 0, wFero.pos.z);
-          if (s.phase === 'r2' && wFero.state !== 'frozen')
-            pub.fero.rotation.y = Math.atan2(
-              game.player.pos.x - wFero.pos.x,
-              game.player.pos.z - wFero.pos.z,
-            );
+        // lamps flicker in the frozen pub (with "Obmedziť záblesky" they only dim for that moment:
+        // the same moment for the regulars, without the flash)
+        const lamp = s.lightsOff ? (comfort.reduceFlashes ? 0.45 : 0) : 1;
+        for (const l of pub.lampLights) l.intensity = lamp * (s.phase === 'r2' ? 1.6 : 3.0);
+        pub.wcSconce.intensity = lamp * (s.phase === 'r2' ? 0.5 : 0.9);
+        for (const m of pub.lampMeshes) m.visible = lamp > 0;
+        pub.barLight.intensity = lamp * (s.phase === 'r2' ? 1.8 : 3.2);
+        // entities: watchers move the regulars' meshes (blended between sim steps); they turn
+        // only while they move: asleep or watched, they sit as they sat
+        for (const [w, o] of [
+          [wJano, pub.jano],
+          [wFero, pub.fero],
+        ] as const) {
+          if (!w || !o) continue;
+          o.position.set(
+            w.prevPos.x + (w.pos.x - w.prevPos.x) * alpha,
+            0,
+            w.prevPos.z + (w.pos.z - w.prevPos.z) * alpha,
+          );
+          if (s.phase === 'r2' && (w.state === 'creep' || w.state === 'return')) {
+            // the entity faces -z at yaw 0, the figures +z
+            const dy = Math.atan2(Math.sin(w.yaw - w.prevYaw), Math.cos(w.yaw - w.prevYaw));
+            o.rotation.y = w.prevYaw + dy * alpha + Math.PI;
+          }
         }
         // TV shows the ceiling camera in the frozen pub
         if (s.phase === 'r2' && t - tvRtAt > tvInterval) {

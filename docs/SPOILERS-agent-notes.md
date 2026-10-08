@@ -131,6 +131,39 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
   from every pendant): the WC and street doors are worn veneer (`counterTop`), and a sconce
   (`wcSconce`, its globe among `lampMeshes`) lights the door and the "WC" plate. `Door` takes
   an optional `uvScale` so the texture tiles like the walls instead of stretching.
+- **Pub audit (2026-10-08).**
+  - **The front door was unreachable** from inside (and in r12 the room from the street): the
+    stove, the round table's square AABB, Fero's full-body box and the chalkboard's rotated
+    AABB closed a ring round the door pocket (widest gap 0.19 m, the capsule needs 0.64). In r2
+    the door prompt focused only from a 0.7 × 0.8 m patch by the regulars. Now: the chalkboard
+    stands against the north wall at (−2.2, 3.95) with an exact rotated collider; round tables
+    have a 12-sided cylinder collider (r 0.53); a wooden sill fills the 10 cm floor gap under
+    the doorway. `tests/e2e/walkways.spec.ts` flood-fills the player's capsule over the real
+    colliders (`capsuleReachable` in `src/sim/physics/reach.ts`, `__mf42.reachable`/`reachMap`):
+    table → door in r1 and r2, inside → square in r1, square → seat in r12.
+  - **Regulars' bodies.** No static boxes any more (they stayed where the regulars started,
+    blocked the door and hid each regular's own sample points from `isObserved`, so they glided
+    out of their seats in plain view on every wake). Each has a 0.6 m `DynamicBody` that follows
+    the watcher and has `sight = false` (rays pass, capsules don't). Head sample at 1.15 m.
+  - Watchers turn only in `creep`/`return` (they swivelled to face you while asleep), are
+    interpolated by `alpha`, wake only once you are ≥ 3 m from both (`wakeWhenClear`, also after
+    the 3 s post-OKNO hold), and catch only with line of sight (no catches through the shut WC
+    door or the stall wall). Door cells close the moment a door starts shutting, and any nav
+    `set` bumps `NavGrid.version`, which makes every entity re-plan its path.
+  - Keys only after `r2Talked` (you could skip the rule and the juniper hint). The key toast
+    shows when she hands them over, not before you ask.
+  - `soloWhenFree` is a real queue (several waiters, no 15 s drop); `t_frozen`, `t_door_open`,
+    `t_knock` and `t_stall` go through it (`pub.frozenSeen` is set after the line played).
+  - Exit: `s.leaving` disables the door prompt and stops wakes and flicker.
+  - WC scene: once the glyph is up, being in the WC > 1.2 s, > 1.3 m from the hinge, with the
+    door open and not opened by you in the last 2.5 s, shuts it (again, if needed); the knock
+    starts once it is shut with you inside. Before, a peek in and out shut it with you outside
+    and nothing ever happened again.
+  - `reduceFlashes`: r2's flicker dims to 45 % instead of black (gameplay unchanged).
+  - Small ones: Vierka posed before freezing (after reloads), jukebox screen reset and neon
+    glow off in r2, crowd mug on the long table at its real height, soap in a wall dish, cellar
+    hatch `ignoreOcclusion`, cash register on the counter, the stool strip blocked in the nav,
+    intro hints name the bound keys, `Game.say` waits at most 2.5 s for a voice clip.
 
 **Characters (`src/npc/Character.ts`)**
 

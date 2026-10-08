@@ -59,7 +59,12 @@ export class Watcher extends Entity {
     this.keepApart();
     this.face(p.pos, dt, 30);
     const remaining = Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
-    if (remaining < this.reach && !p.dead) ctx.catchPlayer(this.id);
+    // within reach, and nothing in between: never through a shut door or a cubicle wall
+    if (remaining < this.reach && !p.dead) {
+      this.tmp.set(this.pos.x, this.pos.y + 1.0, this.pos.z);
+      this.head.set(p.pos.x, p.pos.y + 1.0, p.pos.z);
+      if (ctx.world.lineOfSight(this.tmp, this.head)) ctx.catchPlayer(this.id);
+    }
   }
 
   /** Takes back this tick's step if it walked into another watcher (it waits behind instead). */
