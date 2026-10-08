@@ -241,6 +241,21 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
   `Interactions` prefers targets the look falls on, and small ones (radius ≤ 0.25) over big
   ones around them (`tests/unit/interactions.test.ts`).
 
+**Performance, same picture (2026-10-08)**
+
+- Shadow maps are drawn once per frame: `shadowMap.autoUpdate = false` and
+  `needsUpdate = true` before the composer (its scene pass draws them). With autoUpdate, N8AO's
+  two transparency renders (it auto-detects transparent materials, so always) and r2's TV feed
+  redrew them each time (29 shadow draws per extra render in the frozen pub).
+- Characters are frustum-culled (main and shadow passes) with the bind-pose bounding sphere
+  - 0.4 m (`Character` constructor); before, `frustumCulled = false` drew every character
+    always.
+- r2's TV feed renders only while the TV screen is in the camera's frustum.
+- Measured (SwiftShader, high): r1 seated 366k → 308k triangles per frame; the frozen pub's
+  extra renders no longer redraw shadows. Not done (would change the picture or the assets):
+  a point-light cap on high, simplifying heavy props (street lamps 30k triangles each, stools
+  14k, the cigarette pack 12k), merging small static meshes.
+
 **Engine-wide**
 
 - **Pointer lock** is only requested while the tab is visible and focused. It is released on

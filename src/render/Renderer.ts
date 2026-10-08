@@ -65,7 +65,10 @@ export class GameRenderer {
     this.renderer.toneMapping = NoToneMapping;
     this.renderer.shadowMap.type = PCFShadowMap;
     this.renderer.info.autoReset = false;
-    this.renderer.shadowMap.autoUpdate = true;
+    // shadow maps are drawn once per frame (see render): with autoUpdate every render() redrew
+    // them, and the AO pass renders the scene twice more for its transparent things (a chapter's
+    // TV feed once more): the same shadows three or four times a frame
+    this.renderer.shadowMap.autoUpdate = false;
     this.camera = new PerspectiveCamera(72, 1, 0.05, 220);
     this.bloom = new BloomEffect({
       intensity: 0.9,
@@ -177,6 +180,8 @@ export class GameRenderer {
     }
     this.drunkPass.enabled = this.drunk.active;
     this.renderer.info.reset();
+    // the scene pass (the composer's first) redraws the shadow maps; later passes reuse them
+    this.renderer.shadowMap.needsUpdate = true;
     this.composer.render(frameDt);
     if (this.dynamicRes && this.governor.update(frameDt)) this.resizePending = true;
   }

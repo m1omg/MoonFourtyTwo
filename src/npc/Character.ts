@@ -169,8 +169,18 @@ export class Character {
       if (m.isMesh) {
         m.castShadow = true;
         m.receiveShadow = true;
-        (m as unknown as SkinnedMesh).frustumCulled = false;
       }
+    });
+    // Out of view (and out of a shadow light's view) a character is not drawn. They used to be
+    // drawn always, as the bounds of a posed skinned mesh are not known; the bounds of the bind
+    // pose (arms out) with a margin hold every pose they take, sitting and drinking included.
+    this.root.updateMatrixWorld(true);
+    this.model.traverse((o) => {
+      const sm = o as SkinnedMesh;
+      if (!sm.isSkinnedMesh) return;
+      sm.computeBoundingSphere();
+      if (sm.boundingSphere) sm.boundingSphere.radius += 0.4;
+      else sm.frustumCulled = false;
     });
     // parent-first application order
     const visit = (o: Object3D) => {

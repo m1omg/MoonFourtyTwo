@@ -90,11 +90,14 @@ const reality: RealityModule = {
     };
     /**
      * A thought: never blocks anything (a newer line simply takes over), but never cuts Ežo
-     * short either (it waits out his talk on the intercom: his key line was lost to "Zhaslo.").
+     * short either: during his talk on the intercom it waits for him to finish (his key line was
+     * lost to "Zhaslo.").
      */
     const line = (id: string) => {
-      if (st.busy) return;
-      void say(id).catch(onErr);
+      void (async () => {
+        if (st.busy) await game.clock.until(() => !st.busy);
+        await say(id);
+      })().catch(onErr);
     };
     /** A short scripted action on sim time. */
     const act = (fn: () => Promise<void>) => void fn().catch(onErr);
@@ -720,7 +723,8 @@ const reality: RealityModule = {
             st.lightT = 0;
             lampsOn(false);
             game.synth.click(undefined, 600, 0.06);
-            if (st.darkSaid++ < 2 && F('out')) line('t_dark');
+            // (not said late, after Ežo: the light may be back by then)
+            if (!st.busy && st.darkSaid++ < 2 && F('out')) line('t_dark');
           }
         }
         const lit = st.lightT > 0;

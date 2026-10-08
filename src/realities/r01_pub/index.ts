@@ -1,4 +1,4 @@
-import { Matrix4, PerspectiveCamera, Vector3, WebGLRenderTarget } from 'three';
+import { Frustum, Matrix4, PerspectiveCamera, Vector3, WebGLRenderTarget } from 'three';
 import type { Object3D, MeshBasicMaterial } from 'three';
 import type { RealityModule, RealityInstance } from '../../world/Reality.ts';
 import { buildPub, drawJukebox, drawSlot, type Pub } from './build.ts';
@@ -38,6 +38,8 @@ const TV_LAYER = 3;
 const FACE_REGULARS = Math.atan2(-(-4.3 - 2.2), -(2.6 - 2.3));
 /** The WC door's hinge (its leaf swings 0.9 m into the WC from here). */
 const WC_HINGE = { x: -6.0, z: -0.75 };
+const _frustum = new Frustum();
+const _view = new Matrix4();
 
 const reality: RealityModule = {
   id: 'r1',
@@ -1150,8 +1152,12 @@ const reality: RealityModule = {
             o.rotation.y = w.prevYaw + dy * alpha + Math.PI;
           }
         }
-        // TV shows the ceiling camera in the frozen pub
-        if (s.phase === 'r2' && t - tvRtAt > tvInterval) {
+        // TV shows the ceiling camera in the frozen pub (a whole extra picture of the pub: only
+        // while the screen is in view)
+        cam.updateMatrixWorld();
+        _view.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+        const tvInView = _frustum.setFromProjectionMatrix(_view).intersectsObject(pub.tv.screen);
+        if (s.phase === 'r2' && tvInView && t - tvRtAt > tvInterval) {
           tvRtAt = t;
           const r = game.renderer.renderer;
           tvCam.lookAt(game.player.pos.x, 1.0, game.player.pos.z);
