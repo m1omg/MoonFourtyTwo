@@ -213,4 +213,6 @@ export function installTestApi(game: Game): void {
     },
   };
   (window as unknown as { __mf42: typeof api }).__mf42 = api;
+  // the game itself, for ad-hoc probes from Playwright scripts (test mode only, like all of this)
+  (window as unknown as { __game: Game }).__game = game;
 }

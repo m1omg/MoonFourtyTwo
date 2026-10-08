@@ -47,6 +47,30 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
 
 ## What this pass changed and why (honest, with spoilers)
 
+**Engine-wide fixes from the October audit (2026-10-08)**
+
+- **Saves are immediate.** The `dangerNear` deferral is gone: a respawn always uses the
+  checkpoint's fixed pose and every reality rebuilds its threats, so holding saves back only lost
+  progress (r4 valves, r7 keys, r10 eons, r2 keys). A drink still on its way down is saved as not
+  drunk (`snapshot()`), so a blackout mid-sip never eats a story drink.
+- **Inventory never refuses.** Past six kinds a slot is added (keys 7–9, wheel cycles) and
+  removed again when emptied; `add()` returns `true` always. Before, a full hotbar silently
+  deleted pickups (r8/r10 Čierne = unfinishable chapters).
+- **Missing chapter files after a deploy** (`force_orphan` deletes old hashed chunks): the
+  import is caught, the game saves pointing at the target chapter and reloads; `boot()` resumes
+  straight into it (sessionStorage `este-jedno.resume`, a loop guard of 60 s) and opens the pause
+  menu so the first click grabs the mouse and starts the sound. A WebGL context loss does the same.
+- **Modals.** No pause over endings, documents or choices (`ui.modal`, `ui.choosing`); Resume
+  restores the input state from before the pause and clears latched presses (the Esc/Enter that
+  were pressed in the menu); documents clear them too. `disposeReality` cancels an open choice
+  (`ui.cancelChoice`, resolves −1) and `choose`/`readDocument`/`say` throw `Cancelled` if the clock
+  generation changed while they waited, so an old chapter's script never runs on in the next one.
+  `titleScreen()` disposes a loaded chapter (endings). Credits let the mouse go. Choice keys use
+  `e.code`. New game asks first when a game is saved. "Uložené" shows in the pause menu itself.
+- **Per-chapter state reset on dispose:** drink in flight, `fx` (white, frost, warp, …), reverb.
+- **Lighter vs torch:** only the lighter (`lightPower <= 1`) blows out while sprinting, with a
+  click and a one-time hint naming the bound key. Prompts show the bound interact key.
+
 **r1/r2 pub (`src/realities/r01_pub/`)**
 
 - **Blackout loop.** The nav grid's WC rect touched the room's edge cells across the shared
@@ -89,7 +113,7 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
   keys are "zo zástery"). The ring hides once taken.
   - You ask, she hands them over (owner's requests, 2026-10-07/08): walking up to the bar
     within 2.4 m of her (or "Vypýtať si od Vierky kľúče") runs `vierkaGivesKeys()`. You get
-    `pub.keys` at once and it is **saved at once** (`saveCheckpoint(cp, evenNearDanger)`):
+    `pub.keys` at once and it is **saved at once** (`saveCheckpoint` never defers any more):
     before, an OKNO on the way to the door reloaded a save without the keys, which read as
     "the keys can't be taken". Then `t_ask_keys` (you ask), she unfreezes, `v_keys`, the ring
     slides onto the counter, a toast, `t_keys`. Tested in `tests/e2e/frozen-pub.spec.ts`

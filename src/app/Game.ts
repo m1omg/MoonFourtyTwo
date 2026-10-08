@@ -15,10 +15,10 @@ import { Scope } from '../core/scope.ts';
 import { clamp, damp } from '../core/damp.ts';
 import { comfort } from '../render/comfort.ts';
 import { MusicBox, TUNES } from '../audio/procedural/musicbox.ts';
-import { InputManager } from '../input/InputManager.ts';
+import { DEFAULT_BINDS, InputManager } from '../input/InputManager.ts';
 import type { InputSnapshot } from '../input/actions.ts';
 import { TouchControls } from '../input/touch/TouchControls.ts';
-import { UI } from '../ui/UI.ts';
+import { UI, keyName } from '../ui/UI.ts';
 import { t } from '../i18n/sk.ts';
 import { MAT_COUNT } from '../world/objects/beermats.ts';
 import { AudioSystem } from '../audio/Audio.ts';
@@ -35,7 +35,7 @@ import { BAC_DRUNK, BAC_TIPSY, BAC_WASTED } from '../sim/status/Intoxication.ts'
 import { Inventory } from '../sim/items/Inventory.ts';
 import { ITEMS, type ItemId } from '../sim/items/items.data.ts';
 import { Interactions } from '../sim/interaction/Interactions.ts';
-import { ScriptClock, Flags, runScript } from '../sim/narrative/ScriptRunner.ts';
+import { Cancelled, ScriptClock, Flags, runScript } from '../sim/narrative/ScriptRunner.ts';
 import type { Entity } from '../sim/ai/Entity.ts';
 import type { AIContext, NoiseEvent, PlayerView } from '../sim/ai/types.ts';
 import type { NavGrid } from '../sim/ai/nav/NavGrid.ts';
@@ -57,13 +57,14 @@ import {
 } from '../save/SaveGame.ts';
 import { wallClockMs } from '../core/time.ts';
 import { Handheld } from '../world/objects/handheld.ts';
-import { dangerNear } from '../sim/ai/danger.ts';
 import { onScreen } from '../sim/ai/observe.ts';
 import type { DebugOptions } from './debug.ts';
 
 const _look = new Vector3();
 const _eye = new Vector3();
 const _to = new Vector3();
+/** sessionStorage: when the page reloaded itself to go on with the game (see reloadInto). */
+const RESUME_KEY = 'este-jedno.resume';
 
 type Mode = 'boot' | 'title' | 'loading' | 'play' | 'okno' | 'ending';
 
@@ -172,6 +173,7 @@ export class Game {
     if (debug.test) this.renderer.dynamicRes = false;
     this.loader = new AssetLoader(this.renderer.renderer);
     this.ui = new UI(uiRoot);
+    this.ui.releasePointer = () => this.input.exitPointerLock();
     this.synth = new Synth(this.audio, this.rng.fork(7));
     this.player = new PlayerController(this.world);
     this.rig = new CameraRig(this.renderer.camera, this.player);
@@ -204,8 +206,11 @@ export class Game {
     this.aiCtx = this.makeAIContext();
     this.renderer.renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
-      this.ui.toast(t('updated'));
-      setTimeout(() => location.reload(), 800);
+      // the graphics driver reset (phones do this after a while in the background): keep what
+      // was done since the last checkpoint and carry on after a reload
+      if (this.mode === 'play' && this.realityModule)
+        this.reloadInto(this.realityId, this.checkpoint, t('gpuReset'));
+      else this.reloadInto(null, undefined, t('gpuReset'));
     });
   }
 
@@ -263,12 +268,63 @@ export class Game {
     await this.ui.showSettings(this.settings, () => this.applySettings());
   };
 
+  /**
+   * Reloads the page. With a `reality`, what was done since the last checkpoint is saved first
+   * (pointing there) and the reloaded page goes straight on with it (see boot); with null it just
+   * reloads to the title. A reload loop (the same failure again within a minute) stops at the
+   * title instead.
+   */
+  private reloadInto(reality: string | null, checkpoint: string | undefined, message: string): void {
+    let last = 0;
+    try {
+      last = Number(sessionStorage.getItem(RESUME_KEY) ?? 0);
+    } catch {
+      /* no storage */
+    }
+    if (reality && wallClockMs() - last < 60_000) {
+      sessionStorage.removeItem(RESUME_KEY);
+      this.ui.toast(t('loadFailed'));
+      void this.titleScreen();
+      return;
+    }
+    if (reality) {
+      if (!this.debug.test || this.debug.saves) writeSave(this.snapshot(reality, checkpoint ?? ''));
+      try {
+        sessionStorage.setItem(RESUME_KEY, String(wallClockMs()));
+      } catch {
+        /* private mode: the title it is */
+      }
+    }
+    this.ui.toast(message);
+    setTimeout(() => location.reload(), 900);
+  }
+
   // ───────────────────────────── boot / menus ─────────────────────────────
 
   async boot(): Promise<void> {
     this.loop.manual = !!this.debug.test;
     if (this.debug.test) this.audio.muted = true;
     this.loop.start();
+    // back from a reload for a new version (or a graphics reset): straight on with the saved game
+    let resume = false;
+    try {
+      resume = wallClockMs() - Number(sessionStorage.getItem(RESUME_KEY) ?? 0) < 60_000;
+    } catch {
+      /* no storage */
+    }
+    const save = resume ? loadSave() : null;
+    if (save && !this.debug.reality) {
+      // the sound may only start with the first touch or key after a reload
+      const wake = () => this.audio.unlock();
+      window.addEventListener('pointerdown', wake, { once: true });
+      window.addEventListener('keydown', wake, { once: true });
+      this.audio.unlock();
+      await this.loadGame(save);
+      // a reload has no click to grab the mouse or start the sound with: the pause menu asks for it
+      if (!this.touch && !this.debug.test) void this.openPause();
+      setTimeout(() => sessionStorage.removeItem(RESUME_KEY), 60_000);
+      return;
+    }
     if (this.debug.quick && this.debug.reality && realityExists(this.debug.reality)) {
       if (!this.debug.test) await this.ui.waitForClick();
       this.audio.unlock();
@@ -286,6 +342,8 @@ export class Game {
   }
 
   async titleScreen(): Promise<void> {
+    // an ending comes here with its chapter still loaded (its sounds, its scene behind the menu)
+    if (this.reality || this.scene) this.disposeReality();
     this.mode = 'title';
     // leaving a game from the pause menu must not leave the next one paused
     this.loop.paused = false;
@@ -301,12 +359,22 @@ export class Game {
     theme.play({ ...TUNES.esteJedno!, voice: 'musicbox', rate: 0.78 }, undefined, 0.2);
     let picked: SaveData | null = null;
     let choice: 'new' | 'continue' | 'load';
-    do {
+    for (;;) {
       const book = loadBook();
       const canLoad = book.history.length > 0 || book.slots.some(Boolean);
       choice = await this.ui.showTitle(!!save, this.openSettings, canLoad);
-      if (choice === 'load') picked = await this.ui.showSaves(loadBook(), 'load');
-    } while (choice === 'load' && !picked);
+      if (choice === 'load') {
+        picked = await this.ui.showSaves(loadBook(), 'load');
+        if (!picked) continue;
+      }
+      if (
+        choice === 'new' &&
+        save &&
+        !(await this.ui.confirm(t('newGameAsk'), t('newGameYes'), t('menuBack')))
+      )
+        continue;
+      break;
+    }
     this.goFullscreen();
     theme.stop();
     window.removeEventListener('pointerdown', wake);
@@ -352,19 +420,25 @@ export class Game {
   }
 
   async openPause(): Promise<void> {
-    if (this.pauseOpen || this.mode !== 'play') return;
+    // not over an ending, a document or a choice (each has its own way out; a pause on top of
+    // them used to wipe them, or let you walk away from a question with the mouse captured)
+    if (this.pauseOpen || this.mode !== 'play' || this.ui.modal || this.ui.choosing) return;
     this.pauseOpen = true;
     this.loop.paused = true;
+    const wasEnabled = this.input.active;
     this.input.setEnabled(false);
     this.input.exitPointerLock();
     const found = this.mats.length ? `${t('pauseMats')}: ${this.mats.length} / ${MAT_COUNT}` : undefined;
     let r: 'resume' | 'title' | 'save' | 'load';
     let picked: SaveData | null = null;
+    let notice: string | undefined;
     for (;;) {
-      r = await this.ui.showPause(this.openSettings, found);
+      r = await this.ui.showPause(this.openSettings, found, notice);
+      notice = undefined;
       if (r === 'save') {
         const slot = await this.ui.showSaves(loadBook(), 'save');
-        if (slot !== null && saveToSlot(slot)) this.ui.toast(t('saveDone'));
+        // said in the menu itself: a toast would sit under it
+        if (slot !== null) notice = saveToSlot(slot) ? t('saveDone') : t('saveFailed');
         continue;
       }
       if (r === 'load') {
@@ -385,7 +459,11 @@ export class Game {
       return;
     }
     this.loop.paused = false;
-    this.input.setEnabled(true);
+    // the Esc or Enter pressed in the menu must not pause again or skip a line
+    this.input.clearLatched();
+    // a cutscene that had the controls off keeps them off
+    this.input.setEnabled(wasEnabled);
+    if (!wasEnabled) return;
     if (!this.touch) void this.input.requestPointerLock();
     else this.goFullscreen();
   }
@@ -422,7 +500,16 @@ export class Game {
       this.touch?.setVisible(false);
       const loading = this.ui.showLoading(this.rng.int(0, 5));
       this.disposeReality();
-      const mod = (await REALITIES[target]!()).default;
+      let mod: RealityModule;
+      try {
+        mod = (await REALITIES[target]!()).default;
+      } catch (e) {
+        // a new version went online meanwhile and this page's chapter files are gone: save where
+        // we were going and come back on the new version (see boot)
+        console.error(e);
+        this.reloadInto(target, checkpoint, t('updated'));
+        return;
+      }
       // phones: no model over 9000 triangles or with textures over 512 pixels
       const low = this.renderer.profile.tier === 'low';
       propDetail.maxTris = low ? 9000 : Infinity;
@@ -538,8 +625,16 @@ export class Game {
     this.onSignal = null;
     this.player.forcedHeight = null;
     this.tweens = [];
-    this.pendingSave = null;
     this.respawnHold = null;
+    this.ui.cancelChoice();
+    this.lineId++;
+    this.input.clearLatched();
+    // nothing of the last chapter carries over: a drink on its way down, flashes, the echo
+    this.drinkTimer = 0;
+    this.drinkItem = null;
+    this.handheld.hide();
+    Object.assign(this.fx, { white: 0, shake: 0, frost: 0, warp: 0, vignette: 0, desat: 0 });
+    this.audio.setReverb(1.6, 0.35);
     for (const pr of this.projectiles) pr.mesh.removeFromParent();
     this.projectiles = [];
     this.seated = false;
@@ -561,24 +656,31 @@ export class Game {
   }
 
   /**
-   * @param evenNearDanger save at once although a threat is near (for progress that must not be
-   *   lost, when the checkpoint wakes you somewhere safe, not where you stand)
+   * Saves progress at once, threat or no threat near: a blackout never wakes you where you stood
+   * but at the checkpoint's own spot, with every threat back where it starts (and holding still
+   * until you move, see respawnHold). Holding saves back while a threat was near only lost what
+   * the player had just done (solved valves, keys, eons).
    */
-  saveCheckpoint(cp: string, evenNearDanger = false): void {
+  saveCheckpoint(cp: string): void {
     this.checkpoint = cp;
     if (this.debug.test && !this.debug.saves) return;
-    // never an autosave with something dangerous beside you: it waits until they are away
-    if (!evenNearDanger && dangerNear(this.entities, this.player.pos)) {
-      this.pendingSave = cp;
-      return;
+    writeSave(this.snapshot(this.realityId, cp));
+  }
+
+  /** The save of the game as it stands (a drink still on its way down counts as not drunk). */
+  private snapshot(reality: string, cp: string): SaveData {
+    const inventory = this.inventory.toJSON();
+    if (this.drinkItem && this.drinkTimer > 0) {
+      const held = inventory.find((e) => e.item === this.drinkItem);
+      if (held) held.count++;
+      else inventory.push({ item: this.drinkItem, count: 1 });
     }
-    this.pendingSave = null;
-    writeSave({
+    return {
       v: 1,
-      reality: this.realityId,
+      reality,
       checkpoint: cp,
       flags: this.flags.toJSON(),
-      inventory: this.inventory.toJSON(),
+      inventory,
       selected: this.inventory.selected,
       bac: Math.min(this.status.intox.bac, 1.8),
       mats: [...this.mats],
@@ -586,7 +688,7 @@ export class Game {
       playSeconds: this.playSeconds,
       savedAt: wallClockMs(),
       title: this.realityModule?.title,
-    });
+    };
   }
 
   /** Keeps the collected beer mats in the save right away (they are lore; nothing else changes). */
@@ -644,8 +746,6 @@ export class Game {
 
   /** Where you woke after an okno: threats hold still until you are 1.5 m from it. */
   private respawnHold: Vector3 | null = null;
-  /** A checkpoint save waiting for the danger beside you to go (see saveCheckpoint). */
-  private pendingSave: string | null = null;
 
   // ───────────────────────────── scripting helpers ─────────────────────────────
 
@@ -680,8 +780,10 @@ export class Game {
     let seconds = Math.max(1.8, text.length / 14 + 0.7, minSeconds);
     let handle: { stop(f?: number): void } | null = null;
     if (voiceUrl && this.audio.ctx) {
+      const gen = this.clock.gen;
       if (this.audio.ctx.state === 'suspended') void this.audio.ctx.resume();
       const buf = await this.audio.loadFirst(typeof voiceUrl === 'string' ? [voiceUrl] : voiceUrl);
+      if (gen !== this.clock.gen) throw new Cancelled();
       if (id !== this.lineId) return;
       if (buf) {
         seconds = Math.max(minSeconds, buf.duration + 0.35);
@@ -705,23 +807,34 @@ export class Game {
     if (this.clock.time - this.lineShownAt > 0.4) this.skipRequested = true;
   }
 
+  /**
+   * A choice menu. Throws Cancelled if the chapter went away while it was open (a blackout, a
+   * load): the script that asked must not go on in whatever runs next.
+   */
   async choose(options: string[]): Promise<number> {
+    const gen = this.clock.gen;
     const hadLock = this.input.pointerLocked;
     this.input.exitPointerLock();
     this.input.setEnabled(false);
     const i = await this.ui.choose(options);
+    if (i < 0 || gen !== this.clock.gen) throw new Cancelled();
+    this.input.clearLatched();
     this.input.setEnabled(true);
     if (hadLock && !this.touch) void this.input.requestPointerLock();
     return i;
   }
 
   async readDocument(title: string, body: string): Promise<void> {
+    const gen = this.clock.gen;
     this.input.setEnabled(false);
     this.loop.paused = true;
     const hadLock = this.input.pointerLocked;
     this.input.exitPointerLock();
     await this.ui.showDocument(title, body);
+    if (gen !== this.clock.gen) throw new Cancelled();
     this.loop.paused = false;
+    // the Esc or E that closed it must not pause the game or press something right after
+    this.input.clearLatched();
     this.input.setEnabled(true);
     if (hadLock && !this.touch) void this.input.requestPointerLock();
   }
@@ -818,8 +931,6 @@ export class Game {
     if (hold && Math.hypot(this.player.pos.x - hold.x, this.player.pos.z - hold.z) >= 1.5)
       this.respawnHold = null;
     if (!this.respawnHold) for (const e of this.entities) e.tick(dt, ctx);
-    if (this.pendingSave && !dangerNear(this.entities, this.player.pos))
-      this.saveCheckpoint(this.pendingSave);
     this.noises = [];
 
     // status
@@ -832,8 +943,21 @@ export class Game {
     };
     const events = st.step(dt, env);
     this.handleStatusEvents(events);
-    if (this.hasLight && this.lightOn && this.player.sprinting && this.rng.chance(dt * 0.6))
+    // a lighter's flame blows out when you run (a torch does not)
+    if (
+      this.hasLight &&
+      this.lightOn &&
+      this.lightPower <= 1 &&
+      this.player.sprinting &&
+      this.rng.chance(dt * 0.6)
+    ) {
       this.lightOn = false;
+      this.synth.click(undefined, 260, 0.1);
+      if (!this.flags.has('hint.lighterOut')) {
+        this.flags.put('hint.lighterOut');
+        this.ui.toast(this.lighterOutHint());
+      }
+    }
 
     // reality + interactions + scripts
     r?.tick?.(dt);
@@ -887,6 +1011,11 @@ export class Game {
           if (a.startsWith('slot')) this.inventory.select(Number(a.slice(4)) - 1);
       }
     }
+  }
+
+  private lighterOutHint(): string {
+    if (this.touch) return t('lighterOut');
+    return `${t('lighterOut')} (${keyName(this.settings.keys.light ?? DEFAULT_BINDS.light)})`;
   }
 
   /** Water depth at the player's feet (0 on dry ground), from the reality. */

@@ -41,6 +41,9 @@ const FIXED_ACTIONS: Record<string, Action> = {
   Digit4: 'slot4',
   Digit5: 'slot5',
   Digit6: 'slot6',
+  Digit7: 'slot7',
+  Digit8: 'slot8',
+  Digit9: 'slot9',
   Escape: 'pause',
   Tab: 'journal',
   Space: 'skip',
@@ -121,7 +124,11 @@ export class InputManager {
     document.addEventListener('pointerlockchange', this.onLockChange);
     target.addEventListener('wheel', this.onWheel, { passive: true });
     target.addEventListener('mousedown', this.onMouseDown);
+    // the right button drinks: no browser menu over the game
+    target.addEventListener('contextmenu', this.onContextMenu);
   }
+
+  private onContextMenu = (e: Event): void => e.preventDefault();
 
   detach(): void {
     window.removeEventListener('keydown', this.onKeyDown);
@@ -132,6 +139,17 @@ export class InputManager {
     document.removeEventListener('pointerlockchange', this.onLockChange);
     this.target?.removeEventListener('wheel', this.onWheel);
     this.target?.removeEventListener('mousedown', this.onMouseDown);
+    this.target?.removeEventListener('contextmenu', this.onContextMenu);
+  }
+
+  /** Whether player input is on (not during menus, documents and cutscenes). */
+  get active(): boolean {
+    return this.enabled;
+  }
+
+  /** Forgets presses made while a menu or document was open (an Esc there must not pause after). */
+  clearLatched(): void {
+    this.latched.clear();
   }
 
   setEnabled(on: boolean): void {

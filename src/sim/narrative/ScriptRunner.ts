@@ -91,6 +91,11 @@ export class ScriptClock {
   get pending(): number {
     return this.waiters.length + this.conds.length;
   }
+
+  /** Changes with every cancelAll: a script resuming from a non-clock await compares it. */
+  get gen(): number {
+    return this.generation;
+  }
 }
 
 /** Runs an async script and swallows Cancelled; other errors are logged. */

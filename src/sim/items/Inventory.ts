@@ -5,24 +5,42 @@ export interface Slot {
   count: number;
 }
 
+/** Slots the hotbar always shows; a seventh kind of drink gets a seventh slot. */
 export const SLOT_COUNT = 6;
 
-/** Hotbar of stackable drinks and snacks. */
+/**
+ * Hotbar of stackable drinks and snacks. It never refuses anything: with six kinds already held
+ * a new kind opens another slot (and the slot goes again when it is used up). A full hotbar used
+ * to drop pickups on the floor of nowhere, story items included.
+ */
 export class Inventory {
   readonly slots: Slot[] = Array.from({ length: SLOT_COUNT }, () => ({ item: null, count: 0 }));
   selected = 0;
 
-  add(item: ItemId, count = 1): boolean {
+  add(item: ItemId, count = 1): true {
     const existing = this.slots.find((s) => s.item === item);
     if (existing) {
       existing.count += count;
       return true;
     }
-    const free = this.slots.find((s) => !s.item);
-    if (!free) return false;
+    let free = this.slots.find((s) => !s.item);
+    if (!free) {
+      free = { item: null, count: 0 };
+      this.slots.push(free);
+    }
     free.item = item;
     free.count = count;
     return true;
+  }
+
+  /** An emptied extra slot (past the sixth) closes again. */
+  private emptied(i: number): void {
+    const s = this.slots[i]!;
+    s.item = null;
+    s.count = 0;
+    if (i < SLOT_COUNT) return;
+    this.slots.splice(i, 1);
+    if (this.selected > i || this.selected >= this.slots.length) this.selected--;
   }
 
   has(item: ItemId): boolean {
@@ -38,31 +56,29 @@ export class Inventory {
     if (!s.item || s.count <= 0) return null;
     const item = s.item;
     s.count--;
-    if (s.count <= 0) {
-      s.item = null;
-      s.count = 0;
-    }
+    if (s.count <= 0) this.emptied(this.selected);
     return item;
   }
 
   take(item: ItemId): boolean {
-    const s = this.slots.find((x) => x.item === item);
-    if (!s) return false;
+    const i = this.slots.findIndex((x) => x.item === item);
+    if (i < 0) return false;
+    const s = this.slots[i]!;
     s.count--;
-    if (s.count <= 0) {
-      s.item = null;
-      s.count = 0;
-    }
+    if (s.count <= 0) this.emptied(i);
     return true;
   }
 
   select(i: number): void {
-    this.selected = ((i % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
+    if (!Number.isFinite(i)) return;
+    const n = this.slots.length;
+    this.selected = ((Math.trunc(i) % n) + n) % n;
   }
 
   cycle(dir: 1 | -1): void {
-    for (let k = 1; k <= SLOT_COUNT; k++) {
-      const i = (this.selected + dir * k + SLOT_COUNT * 2) % SLOT_COUNT;
+    const n = this.slots.length;
+    for (let k = 1; k <= n; k++) {
+      const i = (this.selected + dir * k + n * 2) % n;
       if (this.slots[i]!.item) {
         this.selected = i;
         return;
@@ -71,6 +87,7 @@ export class Inventory {
   }
 
   clear(): void {
+    this.slots.length = SLOT_COUNT;
     for (const s of this.slots) {
       s.item = null;
       s.count = 0;

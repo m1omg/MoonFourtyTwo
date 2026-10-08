@@ -11,6 +11,9 @@ export type Action =
   | 'slot4'
   | 'slot5'
   | 'slot6'
+  | 'slot7'
+  | 'slot8'
+  | 'slot9'
   | 'pause'
   | 'journal'
   | 'skip';

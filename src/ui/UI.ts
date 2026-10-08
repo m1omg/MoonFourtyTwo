@@ -29,6 +29,12 @@ export class UI {
   private lastHotbarKey = '';
   /** True while a modal screen (menu, document) is open. */
   modal = false;
+  /** The interact key as bound in the settings (shown with every prompt). */
+  private interactKey = 'E';
+  /** Lets the mouse go (set by the game): screens that need a click call it. */
+  releasePointer: (() => void) | null = null;
+  /** Closes an open choice without an answer (see cancelChoice). */
+  private cancelPending: (() => void) | null = null;
   touchMode = false;
 
   constructor(parent: HTMLElement) {
@@ -58,6 +64,7 @@ export class UI {
   }
 
   applySettings(s: Settings): void {
+    this.interactKey = keyName(s.keys.interact ?? 'KeyE');
     const size = s.subtitleSize === 'small' ? '1rem' : s.subtitleSize === 'large' ? '1.45rem' : '1.15rem';
     document.documentElement.style.setProperty('--sub-size', size);
   }
@@ -171,7 +178,11 @@ export class UI {
     });
   }
 
-  showPause(onSettings: () => Promise<void>, info?: string): Promise<'resume' | 'title' | 'save' | 'load'> {
+  showPause(
+    onSettings: () => Promise<void>,
+    info?: string,
+    notice?: string,
+  ): Promise<'resume' | 'title' | 'save' | 'load'> {
     return new Promise((resolve) => {
       const render = () => {
         const bRes = el('button', { type: 'button' }, t('menuResume'));
@@ -186,6 +197,7 @@ export class UI {
             { class: 'title-block' },
             el('h1', { class: 'title' }, t('pauseTitle')),
             info ? el('p', { class: 'tagline' }, info) : null,
+            notice ? el('p', { class: 'tagline notice' }, notice) : null,
           ),
           el('div', { class: 'menu' }, bRes, bSave, bLoad, bSet, bTitle),
         );
@@ -516,6 +528,9 @@ export class UI {
       t('menuQuitToTitle'),
     );
     this.screen('black', roll, back);
+    // the mouse is still captured from the game: without letting it go there is no cursor to click
+    this.releasePointer?.();
+    back.focus();
     await new Promise<void>((resolve) => back.addEventListener('click', () => resolve()));
     this.clearScreens();
   }
@@ -528,7 +543,7 @@ export class UI {
       this.crosshair.classList.remove('focus');
       return;
     }
-    const key = this.touchMode ? '' : `<kbd>${t('keyHintInteract')}</kbd>`;
+    const key = this.touchMode ? '' : `<kbd>${escapeHtml(this.interactKey)}</kbd>`;
     const html = `${key}${escapeHtml(text)}`;
     if (this.prompt.innerHTML !== html) this.prompt.innerHTML = html;
     this.prompt.classList.add('show');
@@ -546,20 +561,25 @@ export class UI {
     this.subtitles.replaceChildren(line);
   }
 
+  /** Resolves with the picked option, or −1 if the choice was cancelled (see cancelChoice). */
   choose(options: string[]): Promise<number> {
+    this.cancelChoice();
     return new Promise((resolve) => {
-      this.choicesEl?.remove();
       const box = el('div', { class: 'choices' });
+      // the key's place, not its letter: on Slovak and Czech keyboards the top row types ľščť…
       const keyHandler = (e: KeyboardEvent) => {
-        const n = Number(e.key);
+        const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+        const n = m ? Number(m[1]) : 0;
         if (n >= 1 && n <= options.length) pick(n - 1);
       };
       const pick = (i: number) => {
         window.removeEventListener('keydown', keyHandler);
         box.remove();
         this.choicesEl = null;
+        this.cancelPending = null;
         resolve(i);
       };
+      this.cancelPending = () => pick(-1);
       options.forEach((o, i) => {
         const b = el('button', { type: 'button' }, `${this.touchMode ? '' : `${i + 1}. `}${o}`);
         b.addEventListener('click', () => pick(i));
@@ -573,6 +593,32 @@ export class UI {
 
   get choosing(): boolean {
     return !!this.choicesEl;
+  }
+
+  /** Takes an open choice away unanswered (its promise resolves with −1). */
+  cancelChoice(): void {
+    this.cancelPending?.();
+  }
+
+  /** A yes/no question over the current screen; resolves with the answer. */
+  confirm(question: string, yes: string, no: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const bYes = el('button', { type: 'button' }, yes);
+      const bNo = el('button', { type: 'button' }, no);
+      this.screen(
+        'dim',
+        el('div', { class: 'panel' }, el('p', {}, question), el('div', { class: 'menu' }, bYes, bNo)),
+      );
+      bNo.focus();
+      bYes.addEventListener('click', () => {
+        this.clearScreens();
+        resolve(true);
+      });
+      bNo.addEventListener('click', () => {
+        this.clearScreens();
+        resolve(false);
+      });
+    });
   }
 
   setHotbar(slots: HotbarSlot[], selected: number, onTap?: (i: number) => void): void {
@@ -635,7 +681,7 @@ function escapeHtml(s: string): string {
 }
 
 /** A key code as the player knows it (KeyE → E, ShiftLeft → Shift ľavý). */
-function keyName(code: string): string {
+export function keyName(code: string): string {
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);
   if (/^Digit\d$/.test(code)) return code.slice(5);
   if (/^Numpad/.test(code)) return `Num ${code.slice(6)}`;

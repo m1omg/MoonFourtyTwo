@@ -81,7 +81,7 @@ export class Interactions {
 
   use(): boolean {
     const f = this.focused;
-    if (!f) return false;
+    if (!f || (f.enabled && !f.enabled())) return false;
     f.onUse();
     return true;
   }

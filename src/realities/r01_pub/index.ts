@@ -405,7 +405,7 @@ const reality: RealityModule = {
       if (s.keys) return;
       s.keys = true;
       game.flags.put('pub.keys');
-      game.saveCheckpoint(game.checkpoint, true);
+      game.saveCheckpoint(game.checkpoint);
       game.ui.toast('Kľúče od krčmy');
       void soloWhenFree(async () => {
         if (pub.vierka) pub.vierka.frozen = false;
