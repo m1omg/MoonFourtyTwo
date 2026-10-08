@@ -55,7 +55,8 @@ const reality: RealityModule = {
       tint: [0.92, 0.97, 1.08],
       grain: 0.035,
     };
-    if (!game.hasLight) game.giveLight(1);
+    // the lighter (the torch was chapter 8's: older saves still carried its power here)
+    if (!game.hasLight || game.lightPower > 1) game.giveLight(1);
 
     // ───────── state ─────────
     const F = (k: string) => game.flags.has(`more.${k}`);

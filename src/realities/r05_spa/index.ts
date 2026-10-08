@@ -21,7 +21,18 @@ import { Lifeguard } from '../../sim/ai/behaviors/Lifeguard.ts';
 import { Area } from '../../sim/ai/nav/NavGrid.ts';
 import { clamp } from '../../core/damp.ts';
 import { L5 } from './lines.ts';
-import { DOME, FLOOD, FLOOD_FLOOR, HALL, LEVEL_DRAINED, LEVEL_FULL, VORTEX, buildSpa } from './build.ts';
+import {
+  DIVE_POOL,
+  DOME,
+  FLOOD,
+  FLOOD_FLOOR,
+  HALL,
+  LEVEL_DRAINED,
+  LEVEL_FULL,
+  POOL,
+  VORTEX,
+  buildSpa,
+} from './build.ts';
 import { placeBeerMat } from '../../world/objects/beermats.ts';
 
 const reality: RealityModule = {
@@ -159,6 +170,12 @@ const reality: RealityModule = {
     // persisted progress
     const drainFlood = () => {
       spa.nav.fillRect(FLOOD.x0 + 0.4, FLOOD.z0, FLOOD.x1, FLOOD.z1, Area.WALK, true);
+      // out in the flooded strip when it ran dry, he would be stranded on the deck for good (he
+      // moves only through water): he is back at the foot of his chair instead
+      if (guard.inWater && guard.pos.x < FLOOD.x1 + 0.5) {
+        guard.place(guard.dive.x, guard.dive.y, guard.dive.z, guard.yaw);
+        guard.setState('return');
+      }
     };
     if (st.prepad) {
       waters.setTarget('pool', LEVEL_DRAINED, 99);
@@ -268,6 +285,8 @@ const reality: RealityModule = {
         }
         st.hasKey = true;
         game.flags.put('spa.key');
+        // kept at once: a blackout later no longer puts it back on the chair
+        game.saveCheckpoint(game.checkpoint);
         spa.key.visible = false;
         game.synth.clink(S.key, 0.4);
         line('t_key_got');
@@ -299,18 +318,18 @@ const reality: RealityModule = {
             line(`t_${id}`);
           }),
       });
+    let drainNoise: (() => void) | null = null;
     valve('prepad', S.prepad!, () => {
       waters.setTarget('pool', LEVEL_DRAINED, 0.05);
       waters.setTarget('flood', LEVEL_DRAINED, 0.05);
-      stoppers.push(
-        game.synth.loopNoise({
-          kind: 'brown',
-          type: 'lowpass',
-          freq: 260,
-          volume: 0.06,
-          pos: new Vector3(-12, 0, -23),
-        }),
-      );
+      drainNoise = game.synth.loopNoise({
+        kind: 'brown',
+        type: 'lowpass',
+        freq: 260,
+        volume: 0.06,
+        pos: new Vector3(-12, 0, -23),
+      });
+      stoppers.push(() => drainNoise?.());
     });
     valve('vypust', S.vypust!, () => {
       spa.vortex.visible = true;
@@ -333,6 +352,8 @@ const reality: RealityModule = {
         }
         st.unlocked = true;
         game.flags.put('spa.door');
+        // kept at once, and a blackout from here on wakes you just inside the diving hall
+        game.saveCheckpoint('dive');
         spa.diveDoor.locked = false;
         spa.diveDoor.open(95);
         game.synth.click(S.diveDoor, 1400, 0.2);
@@ -359,6 +380,8 @@ const reality: RealityModule = {
       radius: 1.8,
       range: 8,
       prompt: 'Mozaika',
+      // (not while Ežo talks: it is in view from his pool, and a click to skip his line said it)
+      enabled: () => !st.busy,
       onUse: () => line('t_mosaic'),
     });
     I.add({
@@ -492,6 +515,8 @@ const reality: RealityModule = {
         arrival: { pos: spa.spots.arrive!.clone(), yaw: 0 },
         ezo: { pos: new Vector3(1.7, 0, -52.6), yaw: 2.09, pitch: -0.25 },
         pump: { pos: new Vector3(-24.5, 0, -22), yaw: -Math.PI / 2 },
+        // just inside the diving hall, looking in (saved when you unlock its door)
+        dive: { pos: new Vector3(21.2, 0, -23), yaw: -Math.PI / 2 },
       },
       start(cp) {
         placeBeerMat(game, scope, 'r5', new Vector3(5.3, 1.8, 11.4));
@@ -534,6 +559,10 @@ const reality: RealityModule = {
           game.flags.put('spa.dry');
           drainFlood();
         }
+        // once the drain is open, stepping (or slipping) off the springboard is the jump too: the
+        // whirlpool takes you, as it does from the board's end
+        const overDive = p.x > DIVE_POOL.x0 && p.x < DIVE_POOL.x1 && p.z > DIVE_POOL.z0 && p.z < DIVE_POOL.z1;
+        if (st.vypust && !st.jumping && overDive && p.y < 0.5) jump();
         // you cannot swim: deep water closes over your head
         if (!st.jumping && game.playerView.waterDepth > 1.45) void game.okno('voda');
         // places
@@ -551,7 +580,16 @@ const reality: RealityModule = {
           void meetEzo();
         if (p.x < -20.3 && p.z < -17) hint('t_pump');
         if (p.x > 20.3) hint(st.vypust ? 't_vortex' : 't_still');
-        if (p.x > 20.3 && p.z < -17.5 && Math.abs(p.x - 28) < 0.6 && p.y > 0.5) hint('t_board');
+        if (st.vypust && p.x > 20.3 && p.z < -17.5 && Math.abs(p.x - 28) < 0.6 && p.y > 0.5) hint('t_board');
+        // the key on the lifeguard's chair, and the rope over the deep end
+        if (!st.hasKey && p.distanceTo(S.key!) < 4.5) hint('t_key');
+        if (!st.prepad && Math.abs(p.x + 2) < 1.4 && p.z > POOL.z0 && p.z < POOL.z1 && p.y < -0.3)
+          hint('t_rope');
+        // the drain falls silent once the pool is empty
+        if (drainNoise && spa.pool.level <= LEVEL_DRAINED + 0.01) {
+          drainNoise();
+          drainNoise = null;
+        }
         // the absinthe path shows itself only to someone who has had absinthe
         spa.stones.visible = game.status.buffs.has('absinthe');
         // water drips in the big rooms
@@ -565,6 +603,8 @@ const reality: RealityModule = {
       frame(dt, alpha, t) {
         lights.update(game.renderer.camera.position, t);
         waters.frame(t);
+        // the rope's floats go down with the water (they hung in the air over the drained pool)
+        spa.rope.position.y = spa.pool.level - LEVEL_FULL;
         for (const [i, sp] of spa.steam.entries()) {
           sp.position.y = 0.5 + ((t * 0.12 + i * 0.37) % 1.2);
           sp.material.opacity = 0.16 * (1 - ((t * 0.12 + i * 0.37) % 1.2) / 1.2);

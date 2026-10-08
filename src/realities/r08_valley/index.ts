@@ -8,15 +8,20 @@ import { clamp } from '../../core/damp.ts';
 import { L8 } from './lines.ts';
 import { HEMI, HOLE_OFFSET, SHELTER_Z, buildValley, groundHeight } from './build.ts';
 import { placeBeerMat } from '../../world/objects/beermats.ts';
+import { LIGHTER_REACH, TORCH_HALF_ANGLE, torchReach } from '../../sim/lightReach.ts';
+import { comfort } from '../../render/comfort.ts';
 
 const _m = new Matrix4();
 const _q = new Quaternion();
 const _v = new Vector3();
+const _look = new Vector3();
 const _s = new Vector3(1, 1, 1);
 const UP = new Vector3(0, 1, 0);
 
 /** Seconds a fresh battery lasts in the torch. */
 const BATTERY_SECONDS = 80;
+/** Spare batteries add up to this much charge (1 = a fresh torch). */
+const MAX_CHARGE = 2;
 
 const reality: RealityModule = {
   id: 'r8',
@@ -61,6 +66,8 @@ const reality: RealityModule = {
       eonTo: new Vector3(),
       hints: new Set<string>(),
       engineStop: null as (() => void) | null,
+      /** Seconds at the shelter with Čierne not drunk yet. */
+      shelterT: 0,
     };
     const onErr = (e: unknown) => {
       if (!(e instanceof Cancelled)) console.error(e);
@@ -85,23 +92,26 @@ const reality: RealityModule = {
       game.entities.push(f);
       return f;
     });
-    /** Light falls on a figure from your light (in front of you), a burning barrel, or a flash. */
+    /**
+     * Light falls on a figure from your light, a burning barrel, the shelter's tube, or a flash.
+     * Your light reaches as far as it visibly does (the same numbers light the scene): the
+     * lighter in front of you, the torch in its beam, where you really point it (up or down too).
+     */
     const isLit = (f: FrostFigure): boolean => {
       if (st.flashT > 0) return true;
       for (const b of v.barrels)
-        if (b.burning > 0.2 && Math.hypot(f.pos.x - b.pos.x, f.pos.z - b.pos.z) < 6.5) return true;
+        if (b.burning > 0.2 && Math.hypot(f.pos.x - b.pos.x, f.pos.z - b.pos.z) < 8) return true;
+      if (v.lamp.intensity > 0 && Math.hypot(f.pos.x - v.lamp.pos.x, f.pos.z - v.lamp.pos.z) < 8) return true;
       if (!game.lightOn) return false;
       const p = game.player.pos;
-      const dx = f.pos.x - p.x;
-      const dz = f.pos.z - p.z;
-      const d = Math.hypot(dx, dz);
       const torch = game.lightPower > 1;
-      const range = torch ? 8 + 8 * clamp(st.battery * 2, 0, 1) : 5.5;
-      if (d > range) return false;
+      // to the figure's chest, from your eyes
+      _v.set(f.pos.x - p.x, f.pos.y + 1.1 - (p.y + game.player.eyeHeight()), f.pos.z - p.z);
+      const d = _v.length();
       if (d < 1.2) return true;
-      const look = game.lookDir(_v);
-      const lh = Math.hypot(look.x, look.z) || 1;
-      return (look.x * dx + look.z * dz) / (lh * d) > (torch ? 0.8 : 0.55);
+      if (d > (torch ? torchReach(clamp(st.battery * 2, 0, 1)) : LIGHTER_REACH - 1)) return false;
+      const look = game.lookDir(_look);
+      return look.dot(_v) / d > (torch ? Math.cos(TORCH_HALF_ANGLE) : 0.55);
     };
     game.onSignal = null;
 
@@ -110,8 +120,8 @@ const reality: RealityModule = {
     const b0 = v.barrels[0]!;
     I.add({
       id: 'note',
-      pos: b0.pos.clone().setY(b0.pos.y + 0.9),
-      radius: 0.35,
+      pos: S.barrelNote!,
+      radius: 0.2,
       prompt: 'Lístok',
       onUse: () => line('t_note'),
     });
@@ -125,7 +135,8 @@ const reality: RealityModule = {
         v.flashlight.visible = false;
         put('torch');
         game.giveLight(2);
-        st.battery = 1;
+        // batteries found before the torch are not lost
+        st.battery = Math.min(MAX_CHARGE, st.battery + 1);
         game.synth.click(S.flashlight, 1800, 0.12);
         line('t_flashlight');
         game.ui.toast(game.touch ? 'Svetlo zapneš tlačidlom so žiarovkou' : 'Svetlo: kláves F', 3500);
@@ -141,7 +152,7 @@ const reality: RealityModule = {
         onUse: () => {
           bat.visible = false;
           put(`bat${i}`);
-          st.battery = Math.min(1, st.battery + 0.6);
+          st.battery = Math.min(MAX_CHARGE, st.battery + 0.6);
           if (game.flags.get('lighter') >= 2) game.lightPower = 2;
           game.synth.clink(bat.position, 0.3);
           line('t_battery');
@@ -197,14 +208,23 @@ const reality: RealityModule = {
         st.eonTo.set(x, groundHeight(x, SHELTER_Z + 5.5), SHELTER_Z + 5.5);
       }
       st.eonZ = st.eonTo.z;
-      for (const f of figures) f.active = false;
+      // nothing of the valley's night goes on into it: no flash in the sky, no figure still
+      // counted as coming (it kept the heartbeat going), and the torch stays chapter 8's
+      st.flashT = 0;
+      for (const f of figures) {
+        f.active = false;
+        f.setState('still');
+      }
       game.player.frozen = true;
       game.lightOn = false;
+      game.giveLight(1);
       // up at the hole, while it goes
       game.rig.lockTarget = { yaw: 0, pitch: 0.3 };
       line('t_eon');
     };
     game.onEon = startEon;
+    // in the complete darkness after it, the light stays off
+    game.onAction = (a) => a === 'light' && st.eonT >= 0;
     function stepEon(dt: number): void {
       const before = st.eonT;
       st.eonT += dt;
@@ -355,9 +375,21 @@ const reality: RealityModule = {
         if (Math.abs(p.x) > 24) hint('t_deep');
         if (p.z < SHELTER_Z + 8) hint('t_shelter');
         if (game.status.cold.heat < 0.35) hint('t_cold');
-        if (!F('mid') && Math.hypot(p.x - v.barrels[3]!.pos.x, p.z - v.barrels[3]!.pos.z) < 4) {
+        // halfway down the road (by the fourth barrel, on whichever side of the road you walk)
+        if (!F('mid') && p.z < -140) {
           put('mid');
           game.saveCheckpoint('mid');
+        }
+        // at the shelter with Čierne in your pocket, and freezing: what it is for
+        if (game.inventory.has('cierne') && p.z < SHELTER_Z + 8) {
+          st.shelterT += dt;
+          if (st.shelterT > 20 && !st.hints.has('t_cierne_how')) {
+            hint('t_cierne_how');
+            game.ui.toast(
+              game.touch ? 'Vypiješ ho tlačidlom „Piť"' : `Vypiješ ho klávesom ${game.keyLabel('drink')}`,
+              4000,
+            );
+          }
         }
       },
       frame(_dt, alpha, t) {
@@ -403,7 +435,11 @@ const reality: RealityModule = {
           );
         }
         v.sparkles.instanceMatrix.needsUpdate = true;
-        v.hemi.intensity = (st.eonT >= 6.8 ? 0 : HEMI) + (st.flashT > 0 ? 1.4 : 0);
+        // the flash in the sky: with "Obmedziť záblesky" a soft swell instead of a strobe (it
+        // still lights them all for that moment)
+        const flash =
+          st.flashT <= 0 ? 0 : comfort.reduceFlashes ? 0.45 * Math.sin((Math.PI * st.flashT) / 0.35) : 1.4;
+        v.hemi.intensity = (st.eonT >= 6.8 ? 0 : HEMI) + flash;
       },
       coldExposure: () => {
         if (st.eonT >= 0) return 0;
@@ -419,9 +455,10 @@ const reality: RealityModule = {
         }
         return best;
       },
-      darkness: () => (game.lightOn ? 0.3 : 0.65),
+      darkness: () => (st.eonT >= 0 ? 0 : game.lightOn ? 0.3 : 0.65),
       visibility: () => 0.4,
       threat: () => {
+        if (st.eonT >= 0) return 0;
         const p = game.player.pos;
         let best = 0;
         for (const f of figures) {

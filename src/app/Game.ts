@@ -58,6 +58,7 @@ import {
 import { wallClockMs } from '../core/time.ts';
 import { Handheld } from '../world/objects/handheld.ts';
 import { onScreen } from '../sim/ai/observe.ts';
+import { LIGHTER_REACH, TORCH_HALF_ANGLE, torchReach } from '../sim/lightReach.ts';
 import type { DebugOptions } from './debug.ts';
 
 const _look = new Vector3();
@@ -65,6 +66,8 @@ const _eye = new Vector3();
 const _to = new Vector3();
 /** sessionStorage: when the page reloaded itself to go on with the game (see reloadInto). */
 const RESUME_KEY = 'este-jedno.resume';
+/** How long a line waits for its voice clip to download before it shows without it. */
+const VOICE_WAIT_MS = 2500;
 
 type Mode = 'boot' | 'title' | 'loading' | 'play' | 'okno' | 'ending';
 
@@ -131,6 +134,8 @@ export class Game {
   onAction: ((a: string) => boolean) | null = null;
   /** Called when the player tries to move while seated (stand up). */
   onMoveWhileSeated: (() => void) | null = null;
+  /** Seated, and the movement input has been let go since: the next move stands you up. */
+  private seatMoveArmed = false;
 
   private noises: NoiseEvent[] = [];
   private scope: Scope | null = null;
@@ -177,9 +182,9 @@ export class Game {
     this.synth = new Synth(this.audio, this.rng.fork(7));
     this.player = new PlayerController(this.world);
     this.rig = new CameraRig(this.renderer.camera, this.player);
-    this.lightObj = new PointLight(0xffb060, 0, 7, 1.6);
+    this.lightObj = new PointLight(0xffb060, 0, LIGHTER_REACH, 1.6);
     this.lightObj.castShadow = false;
-    this.torchObj = new SpotLight(0xe6eeff, 0, 18, 0.62, 0.5, 1.4);
+    this.torchObj = new SpotLight(0xe6eeff, 0, torchReach(1), TORCH_HALF_ANGLE, 0.5, 1.4);
     this.torchObj.castShadow = false;
     this.torchObj.target = this.torchTarget;
     // what you drink or eat, held up to your face
@@ -800,7 +805,12 @@ export class Game {
     if (voiceUrl && this.audio.ctx) {
       const gen = this.clock.gen;
       if (this.audio.ctx.state === 'suspended') void this.audio.ctx.resume();
-      const buf = await this.audio.loadFirst(typeof voiceUrl === 'string' ? [voiceUrl] : voiceUrl);
+      // a clip that is slow to download (a bad connection) is not waited for long: the line shows
+      // without its voice and the story goes on (it plays next time, once it is in)
+      const buf = await Promise.race([
+        this.audio.loadFirst(typeof voiceUrl === 'string' ? [voiceUrl] : voiceUrl),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), VOICE_WAIT_MS)),
+      ]);
       if (gen !== this.clock.gen) throw new Cancelled();
       if (id !== this.lineId) return;
       if (buf) {
@@ -891,7 +901,12 @@ export class Game {
     this.playSeconds += dt;
     const snap = this.input.snapshot();
     this.handleActions(snap);
-    if (this.seated && (Math.abs(snap.moveX) > 0.4 || Math.abs(snap.moveY) > 0.4)) this.onMoveWhileSeated?.();
+    // moving gets you up from a seat (or out of a hiding place), but only a move made after you sat:
+    // a key still held from running there must be let go first (it pulled you straight back out)
+    const move = Math.max(Math.abs(snap.moveX), Math.abs(snap.moveY));
+    if (!this.seated) this.seatMoveArmed = false;
+    else if (move < 0.2) this.seatMoveArmed = true;
+    else if (move > 0.4 && this.seatMoveArmed) this.onMoveWhileSeated?.();
 
     const st = this.status;
     const bac = st.intox.bac;
@@ -1331,7 +1346,7 @@ export class Game {
         this.torchObj.position.copy(this.lightObj.position);
         this.torchTarget.position.copy(cam.position).add(_to.set(0, 0, -6).applyQuaternion(cam.quaternion));
         this.torchObj.intensity = this.lightOn && torch ? 34 * (0.25 + 0.75 * level) : 0;
-        this.torchObj.distance = 9 + 11 * level;
+        this.torchObj.distance = torchReach(level);
       }
       this.lightBudget?.update(cam);
       // first-person drinking

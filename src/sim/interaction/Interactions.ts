@@ -20,6 +20,8 @@ export interface Interactable {
 }
 
 const _to = new Vector3();
+/** Focus radius up to which a target counts as small (keys, glasses, notes). */
+const SMALL = 0.25;
 
 /** Picks the interactable the player is looking at. */
 export class Interactions {
@@ -66,7 +68,11 @@ export class Interactions {
       const ang = Math.atan2(it.radius, dist);
       const off = Math.acos(Math.min(1, Math.max(-1, cos)));
       if (off > ang + 0.06) continue;
-      const score = -off / Math.max(ang, 0.02) - dist * 0.15;
+      // targets the look actually falls on beat those it merely passes near, and a small one it
+      // falls on beats a big one around it (a key by a wardrobe, a glass under a mosaic: a
+      // click a little off the small one took the big one)
+      const on = off <= ang ? 2 + (it.radius <= SMALL ? 1 : 0) : 0;
+      const score = on - off / Math.max(ang, 0.02) - dist * 0.15;
       if (score <= bestScore) continue;
       if (!it.ignoreOcclusion) {
         const hit = world.raycast(eye, _to, Math.max(0, dist - it.radius - 0.05));

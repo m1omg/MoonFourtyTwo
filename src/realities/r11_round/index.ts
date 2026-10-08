@@ -70,7 +70,8 @@ const reality: RealityModule = {
       tint: [1.02, 0.99, 0.95],
       grain: 0.03,
     };
-    if (!game.hasLight) game.giveLight(1);
+    // the lighter (the torch was chapter 8's: older saves still carried its power here)
+    if (!game.hasLight || game.lightPower > 1) game.giveLight(1);
 
     // ───────── the pub at the end: only Ežo, only the stove ─────────
     for (const o of [pub.vierka?.root, pub.jano, pub.fero]) if (o) o.visible = false;

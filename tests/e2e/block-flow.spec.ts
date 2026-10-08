@@ -37,6 +37,9 @@ const api = (page: Page) => ({
   standUp: () =>
     page.evaluate(() => {
       const m = (window as unknown as W).__mf42;
+      // a key still held when you sat down does not count: a moment of no input first
+      m.move(0, 0);
+      m.sim(0.05);
       m.move(0, 1);
       m.sim(0.2);
       m.move(0, 0);

@@ -62,6 +62,8 @@ export const HALL = { x0: -20, z0: -38, x1: 20, z1: -8 };
 export const DOME = { x: 0, z: -48, r: 7, pool: 4 };
 export const DIVE_POOL = { x0: 23, z0: -29, x1: 33, z1: -19 };
 export const VORTEX = new Vector3(28, -0.1, -24);
+/** Pool walls end this far under the deck they meet (in its plane they z-fought). */
+const RIM = 0.004;
 export const BOARD_END = new Vector3(28, 0.9, -21.7);
 
 export interface Spa {
@@ -79,6 +81,8 @@ export interface Spa {
   key: Mesh;
   /** Stepping stones over the flooded deck, solid only on absinthe. */
   stones: InstancedMesh;
+  /** The lane rope's floats (they sit on the pool's water: move it with the level). */
+  rope: InstancedMesh;
   stonePositions: Vector3[];
   diveDoor: Door;
   vortex: Mesh;
@@ -204,13 +208,16 @@ export async function buildSpa(ctx: RealityCtx): Promise<Spa> {
     if (doors.w !== 'skip') b.wall(x0, z0, x0, z1, -0.5, y1, wall, 0.3, cut(doors.w, z0));
     if (doors.e !== 'skip') b.wall(x1, z0, x1, z1, -0.5, y1, wall, 0.3, cut(doors.e, z0));
   };
-  /** A sunken basin: tiled floor at `floorY`, walls up to the deck. */
+  /**
+   * A sunken basin: tiled floor at `floorY`, walls up to just under the deck (their tops in the
+   * deck's own plane flickered between the two tiles all round the rim).
+   */
   const basin = (x0: number, z0: number, x1: number, z1: number, floorY: number) => {
     b.floor(x0, z0, x1, z1, floorY, poolTile);
-    b.wall(x0, z0, x1, z0, floorY, 0, poolTile, 0.2);
-    b.wall(x0, z1, x1, z1, floorY, 0, poolTile, 0.2);
-    b.wall(x0, z0, x0, z1, floorY, 0, poolTile, 0.2);
-    b.wall(x1, z0, x1, z1, floorY, 0, poolTile, 0.2);
+    b.wall(x0, z0, x1, z0, floorY, -RIM, poolTile, 0.2);
+    b.wall(x0, z1, x1, z1, floorY, -RIM, poolTile, 0.2);
+    b.wall(x0, z0, x0, z1, floorY, -RIM, poolTile, 0.2);
+    b.wall(x1, z0, x1, z1, floorY, -RIM, poolTile, 0.2);
   };
   /** Invisible kerb so nobody walks off the edge into deep water (thrown things fly over it). */
   const kerb = (x0: number, z0: number, x1: number, z1: number, y0 = 0) =>
@@ -324,11 +331,11 @@ export async function buildSpa(ctx: RealityCtx): Promise<Spa> {
   // the pool: deep west end, shallow east end, steps down at the east
   b.floor(POOL.x0, POOL.z0, -2, POOL.z1, -2.35, poolTile);
   b.floor(-2, POOL.z0, POOL.x1, POOL.z1, -1.15, poolTile);
-  b.wall(-2, POOL.z0, -2, POOL.z1, -2.35, -1.15, poolTile, 0.1);
-  b.wall(POOL.x0, POOL.z0, POOL.x1, POOL.z0, -2.35, 0, poolTile, 0.2);
-  b.wall(POOL.x0, POOL.z1, POOL.x1, POOL.z1, -2.35, 0, poolTile, 0.2);
-  b.wall(POOL.x0, POOL.z0, POOL.x0, POOL.z1, -2.35, FLOOD_FLOOR, poolTile, 0.2);
-  b.wall(POOL.x1, POOL.z0, POOL.x1, POOL.z1, -1.15, 0, poolTile, 0.2, [
+  b.wall(-2, POOL.z0, -2, POOL.z1, -2.35, -1.15 - RIM, poolTile, 0.1);
+  b.wall(POOL.x0, POOL.z0, POOL.x1, POOL.z0, -2.35, -RIM, poolTile, 0.2);
+  b.wall(POOL.x0, POOL.z1, POOL.x1, POOL.z1, -2.35, -RIM, poolTile, 0.2);
+  b.wall(POOL.x0, POOL.z0, POOL.x0, POOL.z1, -2.35, FLOOD_FLOOR - RIM, poolTile, 0.2);
+  b.wall(POOL.x1, POOL.z0, POOL.x1, POOL.z1, -1.15, -RIM, poolTile, 0.2, [
     { at: 6.5, width: 3, bottom: -1.15, top: 0 },
   ]);
   b.stairs(10.5, -24, 3, 2, -1.15, 0, '+x', poolTile, 5);
@@ -649,6 +656,9 @@ export async function buildSpa(ctx: RealityCtx): Promise<Spa> {
 
   // ───────── diving hall ─────────
   room(20, -34, 36, -12, 11, wallTile, null, { w: 'skip' });
+  // its west wall is the great hall's east wall, which ends at 9 m: the strip up to this hall's
+  // 11 m ceiling was open to the sky
+  b.wall(20, -34, 20, -12, 9, 11, wallTile, 0.3);
   b.floor(20, -19, 36, -12, 0, deck);
   b.floor(20, -34, 36, -29, 0, deck);
   b.floor(20, -29, 23, -19, 0, deck);
@@ -771,6 +781,7 @@ export async function buildSpa(ctx: RealityCtx): Promise<Spa> {
     lifeguardFigure,
     key,
     stones,
+    rope,
     stonePositions,
     diveDoor,
     vortex,

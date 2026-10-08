@@ -337,6 +337,13 @@ export async function buildBlock(ctx: RealityCtx): Promise<Block> {
     const y0 = k * FH;
     const yh = y0 + FH / 2;
     slab(-3.9, -1.2, y0);
+    if (k === 0) {
+      // nothing is below the ground floor's stairs: a floor under them (the eye looks down onto
+      // it), and the space under the second flight walled off from the landing (a step past
+      // the lift used to drop you into the void)
+      b.box([-2.9, -0.2, -1.2], [2.9, 0, 3.9], terrazzo, { walkSurface: true });
+      b.wall(-2.9, -1.2, -0.48, -1.2, 0, FH - 0.3, white, 0.1);
+    }
     if (k === FLOORS - 1) continue;
     slab(2.4, 3.9, yh);
     flight(0.4, 2.9, -1.2, 2.4, y0, yh);
@@ -838,8 +845,9 @@ export async function buildBlock(ctx: RealityCtx): Promise<Block> {
     scope.add(new SphereGeometry(1, 16, 10)),
     scope.add(new MeshStandardMaterial({ color: 0xdce4ee, roughness: 0.95 })),
   );
-  drift.scale.set(1.4, 1.15, 0.9);
-  drift.position.set(-1.5, 0, -7.1);
+  // (outside the glass: it used to poke through the wall into the vestibule by the intercom)
+  drift.scale.set(1.4, 1.15, 0.75);
+  drift.position.set(-1.5, 0, -7.3);
   scene.add(drift);
   const mail = new Mesh(
     scope.add(new PlaneGeometry(1.6, 0.8)),
@@ -1224,7 +1232,16 @@ function buildEstate(scene: Scene, scope: Scope): Block['litWindow'] {
   scene.add(slabMesh, towerMesh);
   const ground = new Mesh(
     scope.add(new PlaneGeometry(900, 900)),
-    scope.add(new MeshBasicMaterial({ color: 0x3a4456 })),
+    // drawn as if a little further away: it lies in the plane of the ground floor's own floors
+    // (terrazzo, lino) and flickered through them; the blocks still stand on it
+    scope.add(
+      new MeshBasicMaterial({
+        color: 0x3a4456,
+        polygonOffset: true,
+        polygonOffsetFactor: 4,
+        polygonOffsetUnits: 8,
+      }),
+    ),
   );
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);

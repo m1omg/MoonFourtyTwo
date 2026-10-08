@@ -18,6 +18,7 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
   Quaternion,
+  Raycaster,
   RepeatWrapping,
   RingGeometry,
   SphereGeometry,
@@ -50,6 +51,30 @@ export const LOBBY = { x0: -10, z0: 0, x1: 10, z1: 14, h: 3.6 };
 export const CORRIDOR = { x0: -1.2, z0: -40, x1: 1.2, z1: 0, h: 2.8 };
 export const SALON = { x0: -5, z0: -48, x1: 5, z1: -40, h: 3.0 };
 const ROOM_H = 2.7;
+
+/** Unit offsets of a table's four corners (for legs). */
+const CORNERS: ReadonlyArray<readonly [number, number]> = [
+  [-1, -1],
+  [1, -1],
+  [-1, 1],
+  [1, 1],
+];
+
+const _ray = new Raycaster();
+const _from = new Vector3();
+const DOWN = new Vector3(0, -1, 0);
+/**
+ * The top of a placed model under (x, z), where a thing put on it stands (the tables' tops were
+ * guessed: glasses, a key and a lamp floated over some, others were sunk into them), or
+ * `fallback` beside it.
+ */
+function topOf(obj: Object3D | null, x: number, z: number, fallback: number): number {
+  if (!obj) return fallback;
+  obj.updateMatrixWorld(true);
+  _ray.set(_from.set(x, 3, z), DOWN);
+  const hit = _ray.intersectObject(obj, true)[0];
+  return hit ? hit.point.y : fallback;
+}
 
 export type Era = '1906' | '1986' | '2026' | '1e14' | '1e40' | '1e100' | 'tallies' | 'watching';
 /** Rooms along the corridor: west 0, east 0, west 1, east 1, … */
@@ -293,7 +318,8 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
     scope.add(new PlaneGeometry(2.4, 1.0)),
     scope.add(new MeshStandardMaterial({ map: scope.add(keyboardTexture()), roughness: 0.7 })),
   );
-  keyboard.position.set(5.8, 1.75, 0.09);
+  // on the wall's face (z 0.1): at 0.09 it was inside the wall and never drawn
+  keyboard.position.set(5.8, 1.75, 0.105);
   scene.add(keyboard);
   const keyboardHooks: Object3D[] = [];
   const keyGeo = scope.add(new BoxGeometry(0.02, 0.09, 0.008));
@@ -326,6 +352,15 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
   props.place('mid_century_lounge_chair', { pos: [-3.8, 0, 8.6], rotY: -Math.PI / 2 - 0.4 });
   b.box([-7, 0.38, 8.6], [-5, 0.42, 10.2], counterWood);
   b.box([-6.9, 0, 8.7], [-5.1, 0.38, 10.1], null);
+  for (const [lx, lz] of CORNERS)
+    b.box(
+      [-6 + lx * 0.9 - 0.03, 0, 9.4 + lz * 0.7 - 0.03],
+      [-6 + lx * 0.9 + 0.03, 0.38, 9.4 + lz * 0.7 + 0.03],
+      counterWood,
+      {
+        collide: false,
+      },
+    );
   for (const [x, z] of [
     [-9.3, 1],
     [9.2, 13.2],
@@ -339,7 +374,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
       new MeshBasicMaterial({ map: scope.add(signTexture('IZBY · ZIMMER · ROOMS')), transparent: true }),
     ),
   );
-  sign.position.set(0, 2.85, 0.09);
+  sign.position.set(0, 2.85, 0.105);
   scene.add(sign);
 
   // the restaurant: set for two at every table
@@ -358,6 +393,16 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
     b.box([x - 0.6, 0.72, z - 0.6], [x + 0.6, 0.76, z + 0.6], cloth);
     b.box([x - 0.62, 0.45, z - 0.62], [x + 0.62, 0.72, z + 0.62], cloth, { collide: false });
     b.box([x - 0.55, 0, z - 0.55], [x + 0.55, 0.76, z + 0.55], null);
+    // legs under the cloth (it hung in the air)
+    for (const [lx, lz] of CORNERS)
+      b.box(
+        [x + lx * 0.5 - 0.025, 0, z + lz * 0.5 - 0.025],
+        [x + lx * 0.5 + 0.025, 0.45, z + lz * 0.5 + 0.025],
+        counterWood,
+        {
+          collide: false,
+        },
+      );
     chairs.push({ x, y: 0, z: z - 0.95, rotY: 0 }, { x, y: 0, z: z + 0.95, rotY: Math.PI });
     for (const dz of [-0.3, 0.3]) settings.push(new Matrix4().makeTranslation(x, 0.762, z + dz));
   }
@@ -531,14 +576,17 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
     // the night itself, in this room's time
     const fixture: Fixture = { pos: table.clone().setY(2.2), color: 0xffd8a0, intensity: 2.6, distance: 7 };
     let key: Object3D | null = null;
-    /** Two glasses on the table (drawn together with every other room's glasses). */
-    const two = (fill: number, y: number, shot = false) => {
-      for (const d of [-0.22, 0.22])
-        glassAt.push({ x: table.x + d, y, z: table.z + (d > 0 ? 0.1 : -0.12), fill, shot });
+    /** Two glasses standing on `t` (drawn together with every other room's glasses). */
+    const two = (fill: number, t: Object3D | null, fallback: number, shot = false) => {
+      for (const d of [-0.22, 0.22]) {
+        const x = table.x + d;
+        const z = table.z + (d > 0 ? 0.1 : -0.12);
+        glassAt.push({ x, y: topOf(t, x, z, fallback), z, fill, shot });
+      }
     };
     switch (era) {
       case '1906': {
-        props.place('WoodenTable_01', { pos: [table.x, 0, table.z], rotY: 0.05 });
+        const t = props.place('WoodenTable_01', { pos: [table.x, 0, table.z], rotY: 0.05 });
         const c1 = props.place('WoodenChair_01', {
           pos: [table.x, 0, table.z - 0.75],
           rotY: 0,
@@ -549,24 +597,30 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
           rotY: Math.PI,
           collide: 'none',
         });
+        const lampTop = topOf(t, table.x - 0.3, table.z + 0.15, 0.552);
         const lamp = props.place('vintage_oil_lamp', {
-          pos: [table.x - 0.3, 0.76, table.z + 0.15],
+          pos: [table.x - 0.3, lampTop, table.z + 0.15],
           rotY: 0.4,
           collide: 'none',
         });
         erasable.push(...[c1, c2].filter(isObj));
-        two(0.7, 0.76);
+        two(0.7, t, 0.552);
         if (lamp) erasable.push(lamp);
         fixture.color = 0xffb060;
         fixture.intensity = 2.2;
         fixture.flicker = 4;
-        fixture.pos.set(table.x - 0.3, 1.25, table.z + 0.15);
+        fixture.pos.set(table.x - 0.3, lampTop + 0.49, table.z + 0.15);
         key = keyObject(scope);
-        key.position.set(table.x + 0.35, 0.775, table.z - 0.2);
+        key.position.set(
+          table.x + 0.35,
+          topOf(t, table.x + 0.35, table.z - 0.2, 0.552) + 0.004,
+          table.z - 0.2,
+        );
         break;
       }
       case '1986': {
-        props.place('round_wooden_table_01', { pos: [table.x, 0, table.z], rotY: 0 });
+        // (at full size its top stood a metre high, over the chairs, hiding what lay on it)
+        const t = props.place('round_wooden_table_01', { pos: [table.x, 0, table.z], rotY: 0, scale: 0.79 });
         const c1 = props.place('dining_chair_02', {
           pos: [table.x, 0, table.z - 0.8],
           rotY: 0,
@@ -578,29 +632,34 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
           collide: 'none',
         });
         const deck = props.place('portable_cassette_player', {
-          pos: [table.x + 0.25, 0.8, table.z],
+          pos: [table.x + 0.25, topOf(t, table.x + 0.25, table.z, 0.79), table.z],
           rotY: 1.2,
           collide: 'none',
         });
         erasable.push(...[c1, c2, deck].filter(isObj));
-        two(0.5, 0.76);
+        two(0.5, t, 0.79);
         const ash = new Mesh(
           scope.add(new CylinderGeometry(0.07, 0.06, 0.03, 12)),
           scope.add(new MeshStandardMaterial({ color: 0x8a8a90, metalness: 0.6, roughness: 0.4 })),
         );
-        ash.position.set(table.x - 0.2, 0.78, table.z + 0.05);
+        ash.position.set(
+          table.x - 0.2,
+          topOf(t, table.x - 0.2, table.z + 0.05, 0.79) + 0.015,
+          table.z + 0.05,
+        );
         scene.add(ash);
         erasable.push(ash);
         // a low cabinet under the television
         const cx0 = Math.min(outer - side * 0.05, outer - side * 0.6);
         const cx1 = Math.max(outer - side * 0.05, outer - side * 0.6);
-        b.box([cx0, 0, z1 - 3.2], [cx1, 0.9, z1 - 2.0], counterWood);
-        navBlocks.push([cx0, z1 - 3.2, cx1, z1 - 2.0]);
+        // (clear of the bed's foot, which it used to cut into)
+        b.box([cx0, 0, z1 - 2.95], [cx1, 0.9, z1 - 1.75], counterWood);
+        navBlocks.push([cx0, z1 - 2.95, cx1, z1 - 1.75]);
         fixture.color = 0xffc890;
         break;
       }
       case '2026': {
-        props.place('WoodenTable_03', { pos: [table.x, 0, table.z], rotY: 0 });
+        const t = props.place('WoodenTable_03', { pos: [table.x, 0, table.z], rotY: 0 });
         const c1 = props.place('painted_wooden_chair_02', {
           pos: [table.x, 0, table.z - 0.75],
           rotY: 0,
@@ -612,7 +671,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
           collide: 'none',
         });
         erasable.push(...[c1, c2].filter(isObj));
-        two(0.85, 0.75);
+        two(0.85, t, 0.832);
         const wheel = new Mesh(
           scope.add(new CircleGeometry(0.4, 32)),
           scope.add(
@@ -638,8 +697,8 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
         });
         if (t) tintAll(t, mossMat.material);
         if (c1) tintAll(c1, mossMat.material);
-        two(0, 0.76);
-        mushrooms(scope, scene, table, x0, x1, z0, z1);
+        two(0, t, 0.552);
+        mushrooms(scope, scene, table, x0, x1, z0, z1, (x, z) => topOf(t, x, z, 0));
         const stand = props.place('painted_wooden_nightstand', {
           pos: [outer - side * 0.35, 0, z0 + 4.5],
           rotY: side < 0 ? Math.PI / 2 : -Math.PI / 2,
@@ -649,21 +708,25 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
         fixture.intensity = 1.6;
         fixture.distance = 6;
         key = keyObject(scope);
-        key.position.set(outer - side * 0.35, 0.625, z0 + 4.5);
+        key.position.set(
+          outer - side * 0.35,
+          topOf(stand, outer - side * 0.35, z0 + 4.5, 0.621) + 0.004,
+          z0 + 4.5,
+        );
         break;
       }
       case '1e40': {
         const t = props.place('WoodenTable_01', { pos: [table.x, -0.08, table.z], rotY: 0.6, rotZ: 0.12 });
         if (t) tintAll(t, frostMat.material);
-        two(0, 0.72);
+        two(0, t, 0.47);
         fixture.color = 0x9ab8ff;
         fixture.intensity = 1.6;
         fixture.pos.set(table.x, 4, table.z);
         break;
       }
       case '1e100': {
-        props.place('WoodenTable_03', { pos: [table.x, 0, table.z], rotY: 0 });
-        two(0, 0.75, true);
+        const t = props.place('WoodenTable_03', { pos: [table.x, 0, table.z], rotY: 0 });
+        two(0, t, 0.832, true);
         fixture.color = 0x8090a0;
         fixture.intensity = 0.5;
         fixture.distance = 3;
@@ -673,7 +736,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
       case 'tallies': {
         const t = props.place('WoodenTable_03', { pos: [table.x, 0, table.z], rotY: 0 });
         if (t) tintAll(t, tallyMat.material);
-        two(0.2, 0.75);
+        two(0.2, t, 0.832);
         fixture.color = 0xfff0d0;
         fixture.intensity = 2;
         key = keyObject(scope);
@@ -682,7 +745,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
         break;
       }
       case 'watching': {
-        props.place('WoodenTable_03', { pos: [table.x, 0, table.z], rotY: 0 });
+        const t = props.place('WoodenTable_03', { pos: [table.x, 0, table.z], rotY: 0 });
         props.place('painted_wooden_chair_02', {
           pos: [table.x, 0, table.z - 0.75],
           rotY: 0,
@@ -693,7 +756,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
           rotY: Math.PI,
           collide: 'none',
         });
-        two(0.85, 0.75);
+        two(0.85, t, 0.832);
         fixture.color = 0xffd49a;
         fixture.intensity = 2.4;
         break;
@@ -772,7 +835,7 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
     watcher.root.position.set(wroom.table.x, -0.5 + 0.02, wroom.table.z - 0.7);
     watcher.root.rotation.y = 0;
     scene.add(watcher.root);
-    watcher.holdOnTable(tw.mug(0.6), 0.762);
+    watcher.holdOnTable(tw.mug(0.6), 0.834);
   }
   const jg = props.gltf('jano');
   let me: Character | null = null;
@@ -993,8 +1056,10 @@ export async function buildHotel(ctx: RealityCtx): Promise<Hotel> {
   cut(-7.2, 8.4, -4.8, 10.4); // low table
   for (const x of [-8.2, -3.8]) cut(x - 0.5, 8.1, x + 0.5, 9.1); // lounge chairs
   for (const [x, z] of tables) cut(x - 0.6, z - 0.6, x + 0.6, z + 0.6);
-  for (const r of rooms) cut(r.table.x - 0.7, r.table.z - 0.45, r.table.x + 0.7, r.table.z + 0.45);
+  // the rooms' tables are up to 1.8 m long (she walked through their ends)
+  for (const r of rooms) cut(r.table.x - 0.95, r.table.z - 0.5, r.table.x + 0.95, r.table.z + 0.5);
   for (const [x0, z0, x1, z1] of navBlocks) cut(x0, z0, x1, z1);
+  cut(20.3, 1.8, 24, 12.2); // the dance hall's stage (she sank into it)
   const patrol = [
     new Vector3(0, 0, -2),
     new Vector3(0, 0, -12),
@@ -1133,6 +1198,8 @@ function mushrooms(
   x1: number,
   z0: number,
   z1: number,
+  /** Where one on the table stands (the table's top there; the floor beside it). */
+  tableTop: (x: number, z: number) => number,
 ): void {
   const stem = scope.add(new CylinderGeometry(0.012, 0.018, 1, 6));
   stem.translate(0, 0.5, 0);
@@ -1148,7 +1215,7 @@ function mushrooms(
     const onTable = i < 12;
     const x = onTable ? table.x + (r() - 0.5) * 1.2 : x0 + 0.3 + r() * (x1 - x0 - 0.6);
     const z = onTable ? table.z + (r() - 0.5) * 0.7 : z0 + 0.3 + r() * (z1 - z0 - 0.6);
-    const y = onTable ? 0.76 : 0;
+    const y = onTable ? tableTop(x, z) : 0;
     const h = 0.05 + r() * 0.12;
     const capR = 0.025 + r() * 0.05;
     stems.setMatrixAt(i, new Matrix4().compose(new Vector3(x, y, z), new Quaternion(), new Vector3(1, h, 1)));
@@ -1202,7 +1269,7 @@ function buildCart(scope: Scope): Group {
 
 function buildTv(scope: Scope, scene: RealityCtx['scene'], props: Props, room: Room): HockeyTV {
   const x = room.side < 0 ? room.x0 + 0.5 : room.x1 - 0.5;
-  const z = room.z1 - 2.6;
+  const z = room.z1 - 2.35; // on the middle of its cabinet
   const rotY = room.side < 0 ? Math.PI / 2 : -Math.PI / 2;
   props.place('Television_01', { pos: [x, 0.9, z], rotY, collide: 'none' });
   const tv = new HockeyTV(scope, 0.37, 0.28);

@@ -22,6 +22,9 @@ const LIGHT_SECONDS = 60;
 const LIFT_OPEN = 95;
 
 const _m = new Matrix4();
+/** The first fixtures of `blk.fixtures`: our flat's lamps (their intensities), then the caretaker's. */
+const FLAT_LAMPS = [5, 2.2, 1.8, 2.6, 1.6];
+const CARETAKER_LAMP = 5;
 const _v = new Vector3();
 const PEEP_OFF = new Color(0x050505);
 const PEEP_ON = new Color(0xffd9a0);
@@ -77,14 +80,22 @@ const reality: RealityModule = {
       riding: false,
       toInfinity: false,
       panelTries: 0,
+      /** The panel's own scene is running (its line, the choice, the ride): no second one. */
+      panelBusy: false,
       hints: new Set<string>(),
     };
     put('loop', 0);
     const onErr = (e: unknown) => {
       if (!(e instanceof Cancelled)) console.error(e);
     };
-    /** A thought: never blocks anything (a newer line simply takes over). */
-    const line = (id: string) => void say(id).catch(onErr);
+    /**
+     * A thought: never blocks anything (a newer line simply takes over), but never cuts Ežo
+     * short either (it waits out his talk on the intercom: his key line was lost to "Zhaslo.").
+     */
+    const line = (id: string) => {
+      if (st.busy) return;
+      void say(id).catch(onErr);
+    };
     /** A short scripted action on sim time. */
     const act = (fn: () => Promise<void>) => void fn().catch(onErr);
     const hint = (id: string) => {
@@ -261,13 +272,21 @@ const reality: RealityModule = {
         else openLift();
         return;
       }
-      // the cabin is elsewhere: call it down (or up)
+      // the cabin is elsewhere: call it down (or up). Its door on the floor it leaves shuts
+      // first (it stayed drawn open there, and this floor's door snapped open without a sound).
       act(async () => {
         st.calling = true;
         hint('t_lift_calling');
+        blk.liftDoors.setMatrixAt(st.liftFloor, liftDoorMatrix(st.liftFloor, 0, _m));
+        blk.liftDoors.instanceMatrix.needsUpdate = true;
+        st.liftAngle = st.liftTarget = 0;
         const stop = motor();
-        await game.clock.wait(2.5);
-        stop();
+        try {
+          await game.clock.wait(2.5);
+        } finally {
+          // (also when a blackout ends the chapter mid-wait: the motor never ran on for ever)
+          stop();
+        }
         st.liftFloor = k;
         placeCabin();
         game.synth.clank(liftPos.clone(), 0.5);
@@ -287,8 +306,11 @@ const reality: RealityModule = {
       await shutAndGo();
       line('t_lift_up');
       const stop = motor();
-      await game.clock.wait(4.5);
-      stop();
+      try {
+        await game.clock.wait(4.5);
+      } finally {
+        stop();
+      }
       const dy = (LOOP_FLOOR - st.liftFloor) * FH;
       const p = game.player.pos;
       game.player.teleport(_v.set(p.x, p.y + dy, p.z));
@@ -320,16 +342,22 @@ const reality: RealityModule = {
         line(st.panelTries++ === 0 ? 't_panel' : 't_panel_sober');
         return;
       }
+      if (st.panelBusy) return;
+      st.panelBusy = true;
       act(async () => {
-        if (!F('panelDrunk')) {
-          put('panelDrunk');
-          await say('t_panel_drunk');
+        try {
+          if (!F('panelDrunk')) {
+            put('panelDrunk');
+            await say('t_panel_drunk');
+          }
+          const i = await game.choose(['14', '40', '100', '∞', 'Nikam']);
+          if (i < 0 || i > 3) return;
+          game.synth.click(panelPos.clone(), 1500, 0.12);
+          if (i === 3) await rideOn();
+          else await rideUp(['14', '40', '100'][i]!);
+        } finally {
+          st.panelBusy = false;
         }
-        const i = await game.choose(['14', '40', '100', '∞', 'Nikam']);
-        if (i < 0 || i > 3) return;
-        game.synth.click(panelPos.clone(), 1500, 0.12);
-        if (i === 3) await rideOn();
-        else await rideUp(['14', '40', '100'][i]!);
       });
     };
 
@@ -587,7 +615,7 @@ const reality: RealityModule = {
       radius: 0.15,
       range: 1.6,
       prompt: 'Gombíky',
-      enabled: () => !st.riding && inCabin(game.player.pos),
+      enabled: () => !st.riding && !st.panelBusy && inCabin(game.player.pos),
       onUse: usePanel,
     });
 
@@ -615,7 +643,7 @@ const reality: RealityModule = {
             st.metEzo = true;
             put('ezo');
             game.saveCheckpoint('ground');
-          } else await say('e6_4');
+          } else await say(st.hasKey ? 'e6_4' : 'e6_2'); // where the key is, until you have it
         } finally {
           crackle();
         }
@@ -750,7 +778,16 @@ const reality: RealityModule = {
       frame(dt, alpha, t) {
         const cam = game.renderer.camera.position;
         const flick = st.toInfinity ? (Math.sin(t * 37) * Math.sin(t * 11.3) > 0.4 ? 0.1 : 1) : 1;
-        blk.cabinFixture.intensity = 2.2 * flick;
+        // lamps behind walls light only their own rooms (no shadows: through a wall they lit
+        // "dark" landings): the cabin's while its door is open or you are in it, each flat's
+        // while you are in it or its door is open
+        const p = game.player.pos;
+        blk.cabinFixture.intensity = st.liftAngle > 5 || inCabin(p) ? 2.2 * flick : 0;
+        const inFlat = p.z < -4.05 && Math.abs(p.y - HOME_FLOOR * FH) < 1.5;
+        const flatOn = inFlat || blk.flatDoor.angle > 5;
+        FLAT_LAMPS.forEach((v, i) => (blk.fixtures[i]!.intensity = flatOn ? v : 0));
+        const caretakerOn = (p.x > 3.05 && p.y < 1.5) || blk.caretakerDoor.angle > 5;
+        blk.fixtures[CARETAKER_LAMP]!.intensity = caretakerOn ? 5.5 : 0;
         lights.update(cam, t);
         blk.waters.frame(t);
         blk.tvScreen.draw(t);

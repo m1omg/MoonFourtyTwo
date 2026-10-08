@@ -199,6 +199,48 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
   (softlock); now it goes back into the inventory.
 - **r12:** the clink sound used the mug's bone-local position; it now uses its world position.
 
+**October audit, chapters 5–8 (2026-10-08)**
+
+- **r5:** the key and the dive-door unlock save at once (new checkpoint `dive`, just inside the
+  diving hall, on unlock). After VÝPUST, stepping or slipping off the springboard over the dive
+  pool runs `jump()` (before VÝPUST deep water is still OKNO). The lifeguard is put back at his
+  dive point (`return`) if the flood strip drains under him (he was stranded on dry nav). Lane
+  rope follows the pool level; the drain noise stops when the pool is empty; `t_board` only after
+  VÝPUST; `t_key` near the chair and `t_rope` at the rope finally play; the mosaic is disabled
+  while Ežo talks. Pool walls stop 4 mm under the deck (`RIM`, rim z-fight); the diving hall's
+  west wall strip 9–11 m is closed.
+- **r6:** floor 0 gets a terrazzo slab under the stairs and a wall closing the space under
+  flight B from the landing (a step past the lift dropped you into the void). The estate ground
+  plane uses `polygonOffset` (it z-fought the ground floor). Lift motor loops stop in `finally`
+  (a blackout mid-wait left them running for ever); calling the lift shuts its door on the floor
+  it leaves; the panel can't open two choices (`panelBusy`). Thoughts (`line`) wait out Ežo on
+  the intercom; calling him again before you have the key repeats `e6_2`. The cabin lamp and
+  the flats' lamps only shine while their door is open or you are inside (they lit "dark"
+  landings through walls). The snow drift no longer pokes into the vestibule.
+- **r7:** items stand on the tables' real tops (`topOf` raycasts the placed model: the 1906 key
+  and glasses floated 21–23 cm, the 1986 table stood 1 m high and hid its things, 10¹⁰⁰'s shots
+  were inside the board); 1986's table is scaled 0.79; the watching room's mug uses 0.834. The
+  maid is parked (`active = false`) during Ežo's salon talk; her knock call plays only within
+  12 m and never over Ežo; `c_found` goes through `line()`. Salon unlock saves. Key board and the
+  corridor sign moved onto the wall face (z 0.105). The cart starts in front of her (`place`
+  override). Mirror-ball specks land on the walls' faces. 1986 cabinet + TV moved 0.25 m off the
+  bed. Nav: room-table cuts ±0.95 × ±0.5, the stage is cut. Restaurant tables and the lobby
+  coffee table have legs. `t_watching2` waits 4.4 s.
+- **r8:** `isLit` counts the shelter tube (within 8 m while on) and barrels within 8 m (was
+  6.5); the carried light's reach is shared with the renderer (`src/sim/lightReach.ts`: lighter
+  6 m in a 0.55 cone, torch `torchReach(level)` in the beam's half angle, pitch included).
+  Batteries add up to a charge of 2 (one found before the torch was lost). The eon clears the
+  flash, stills the figures, returns 0 threat/darkness, blocks the light key and switches the
+  carried light back to the lighter (`giveLight(1)`); r9–r11 also reset a carried power > 1.
+  The sky flash swells softly with `reduceFlashes`. `mid` saves at z < −140 (either side of the
+  road); `t_cierne_how` + the toast after 20 s at the shelter holding Čierne. Ežo's note is a
+  paper on barrel 0 (the prompt sits on it). Terrain 450 m long (its edge showed); the bus has
+  wheels; the shelter bench has feet.
+- **Engine:** seated/hidden players stand up only on a move made after the movement input was
+  released once (`seatMoveArmed`; hiding while holding W used to pull you straight back out).
+  `Interactions` prefers targets the look falls on, and small ones (radius ≤ 0.25) over big
+  ones around them (`tests/unit/interactions.test.ts`).
+
 **Engine-wide**
 
 - **Pointer lock** is only requested while the tab is visible and focused. It is released on

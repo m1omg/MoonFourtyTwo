@@ -91,7 +91,9 @@ export async function buildValley(ctx: RealityCtx): Promise<Valley> {
   await props.load(['Barrel_01'], (p) => ctx.progress(p * 0.5));
 
   // ───────── the ground: a valley of snow ─────────
-  const terrain = new PlaneGeometry(240, 330, 96, 132);
+  // (far past both ends of the road: its edge used to show through the fog behind the landing
+  // and beyond the shelter)
+  const terrain = new PlaneGeometry(240, 450, 96, 180);
   terrain.rotateX(-Math.PI / 2);
   terrain.translate(0, 0, -132);
   const pos = terrain.getAttribute('position');
@@ -232,6 +234,15 @@ export async function buildValley(ctx: RealityCtx): Promise<Valley> {
   const b0 = barrels[0]!;
   flashlight.position.set(b0.pos.x - 0.45, b0.pos.y + 0.02, b0.pos.z + 0.1);
   scene.add(flashlight);
+  // Ežo's note, stuck to the same barrel on the road side (there was a prompt, but no paper)
+  const barrelNote = new Mesh(
+    scope.add(new PlaneGeometry(0.1, 0.14)),
+    scope.add(new MeshStandardMaterial({ color: 0xf0ead8, roughness: 0.9, emissive: 0x141210 })),
+  );
+  const side0 = Math.sign(b0.pos.x) || 1;
+  barrelNote.position.set(b0.pos.x - side0 * 0.29, b0.pos.y + 0.52, b0.pos.z);
+  barrelNote.rotation.set(0, (-side0 * Math.PI) / 2, 0.06);
+  scene.add(barrelNote);
   const batteries = [
     [1.8, -75],
     [-2.0, -165],
@@ -294,6 +305,8 @@ export async function buildValley(ctx: RealityCtx): Promise<Valley> {
   part(0.25, 2.6, 2.2, 3.1, gy + 1.3, Z - 1);
   part(6.8, 0.2, 2.8, 0, gy + 2.7, Z - 0.9);
   part(5.4, 0.08, 0.5, 0, gy + 0.46, Z - 1.55);
+  // the bench's two concrete feet (its seat hung in the air)
+  for (const x of [-2.2, 2.2]) part(0.12, 0.42, 0.36, x, gy + 0.21, Z - 1.55);
   b.box([-3.3, gy - 0.2, Z - 2.2], [3.3, gy, Z + 0.3], null, { walkSurface: false });
   const floorSlab = new Mesh(scope.add(new BoxGeometry(6.6, 0.2, 2.6)), concrete);
   floorSlab.position.set(0, gy - 0.08, Z - 0.95);
@@ -436,6 +449,15 @@ export async function buildValley(ctx: RealityCtx): Promise<Valley> {
   );
   bus.position.set(0, 0.78, 5.8);
   headlights.add(sign, bus);
+  // on wheels (the body hung in the air over the snow, its own light showing the gap)
+  const wheelGeo = scope.add(new CylinderGeometry(0.5, 0.5, 0.3, 16).rotateZ(Math.PI / 2));
+  const rubber = scope.add(new MeshStandardMaterial({ color: 0x121212, roughness: 0.85 }));
+  for (const x of [-1.12, 1.12])
+    for (const z of [2.4, 9.2]) {
+      const w = new Mesh(wheelGeo, rubber);
+      w.position.set(x, -0.5, z);
+      headlights.add(w);
+    }
   headlights.position.set(0, groundHeight(0, Z + 60) + 1.0, Z + 60);
   headlights.visible = false;
   scene.add(headlights);
@@ -476,6 +498,7 @@ export async function buildValley(ctx: RealityCtx): Promise<Valley> {
       mosaic: mosaic.position.clone(),
       cierne: cierne.position.clone(),
       flashlight: flashlight.position.clone(),
+      barrelNote: barrelNote.position.clone(),
     },
   };
 }

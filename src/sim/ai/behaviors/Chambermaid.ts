@@ -44,6 +44,13 @@ export class Chambermaid extends Entity {
     this.state = 'patrol';
   }
 
+  /** Placed: her cart in front of her at once (it stood at the origin until she first moved). */
+  override place(x: number, y: number, z: number, yaw = 0): void {
+    super.place(x, y, z, yaw);
+    this.cartPos.set(x - Math.sin(yaw) * 0.85, y, z - Math.cos(yaw) * 0.85);
+    this.cartYaw = yaw;
+  }
+
   /** The room she is busy with (its door should open while she is in there). */
   get busyRoom(): number | null {
     return this.room && ['knock', 'enter', 'clean', 'leave'].includes(this.state) ? this.room.index : null;

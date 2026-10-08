@@ -148,7 +148,8 @@ const reality: RealityModule = {
             game.synth.thud(at, 0.5);
             await game.clock.wait(0.28);
           }
-          void say('c_knock');
+          // her call only where you can hear it, and never over Ežo (it cut his lines)
+          if (!st.busy && game.player.pos.distanceTo(at) < 12) line('c_knock');
           await game.clock.wait(0.6);
           r.doorObj.open(95);
           game.synth.creak(at, 0.8, 0.12);
@@ -167,7 +168,7 @@ const reality: RealityModule = {
       } else if (name === 'open') {
         game.synth.creak(game.player.pos.clone(), 0.5, 0.25);
         game.synth.stinger(0.7);
-        void say('c_found');
+        line('c_found');
       }
     };
 
@@ -337,6 +338,8 @@ const reality: RealityModule = {
           return;
         }
         put('salon');
+        // kept: a blackout before you step in no longer locks it again
+        game.saveCheckpoint(game.checkpoint);
         h.salonDoor.locked = false;
         h.salonDoor.open(95);
         for (let i = 0; i < 3; i++) game.synth.click(S.salonDoor, 1300 + i * 200, 0.15);
@@ -371,16 +374,23 @@ const reality: RealityModule = {
     async function meetEzo(): Promise<void> {
       await solo(async () => {
         const e = h.ezo;
-        await say('e7_1', e);
-        await say('e7_2', e);
-        await say('e7_3', e);
-        await game.clock.wait(1.2);
-        await say('e7_4', e);
-        await game.clock.wait(0.8);
-        await say('e7_5', e);
-        await say('e7_6', e);
-        put('ezo');
-        game.saveCheckpoint('salon');
+        // she keeps out of it while he talks (she spotted you through the open salon door from
+        // the corridor's end and came for you mid-sentence)
+        maid.active = false;
+        try {
+          await say('e7_1', e);
+          await say('e7_2', e);
+          await say('e7_3', e);
+          await game.clock.wait(1.2);
+          await say('e7_4', e);
+          await game.clock.wait(0.8);
+          await say('e7_5', e);
+          await say('e7_6', e);
+          put('ezo');
+          game.saveCheckpoint('salon');
+        } finally {
+          maid.active = true;
+        }
       });
     }
 
@@ -478,9 +488,10 @@ const reality: RealityModule = {
           hint(eraLine(room.era));
           if (room.era === 'watching' && st.watchT < 0) st.watchT = 0;
         }
-        if (st.watchT >= 0 && st.watchT < 3) {
+        // (once the room's own line has been said: at 2.5 s it cut that line short)
+        if (st.watchT >= 0 && st.watchT < 5) {
           st.watchT += dt;
-          if (st.watchT >= 2.5) {
+          if (st.watchT >= 4.4) {
             st.watchT = 9;
             if (h.watcher) h.watcher.lookTarget = game.renderer.camera.position;
             game.synth.stinger(0.5);
@@ -560,7 +571,8 @@ const reality: RealityModule = {
           const a = t * 0.35;
           const dx = d0.x * Math.cos(a) + d0.z * Math.sin(a);
           const dz = -d0.x * Math.sin(a) + d0.z * Math.cos(a);
-          const hit = rayBox(c, dx, d0.y, dz, 10.05, 0.02, 0.05, 23.95, 3.58, 13.95);
+          // (the walls' faces: on their centre lines the specks were inside them)
+          const hit = rayBox(c, dx, d0.y, dz, 10.11, 0.02, 0.11, 23.89, 3.58, 13.89);
           // a speck of light on the wall, facing the ball
           _m.lookAt(hit, c, _v.set(0, 1, 0)).setPosition(hit);
           h.specks.setMatrixAt(i, _m);
