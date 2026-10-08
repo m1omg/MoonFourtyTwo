@@ -30,10 +30,25 @@ export class Door {
     /** +1 opens counter-clockwise (seen from above), -1 clockwise. */
     readonly openDir: 1 | -1 = 1,
     thickness = 0.05,
+    /** Metres per texture repeat, as on the walls (default: the texture stretched over each face). */
+    uvScale?: number,
   ) {
     this.pivot.position.set(...hinge);
     this.pivot.rotation.y = rotY;
     const geo = scope.add(new BoxGeometry(width, height, thickness));
+    if (uvScale) {
+      const uv = geo.getAttribute('uv');
+      const n = geo.getAttribute('normal');
+      for (let i = 0; i < uv.count; i++) {
+        const [su, sv] =
+          Math.abs(n.getX(i)) > 0.5
+            ? [thickness, height]
+            : Math.abs(n.getY(i)) > 0.5
+              ? [width, thickness]
+              : [width, height];
+        uv.setXY(i, (uv.getX(i) * su) / uvScale, (uv.getY(i) * sv) / uvScale);
+      }
+    }
     geo.translate(width / 2, height / 2, 0);
     this.leaf = new Mesh(geo, material);
     this.leaf.castShadow = true;

@@ -17,6 +17,8 @@ export class Watcher extends Entity {
   unseen = 0;
   /** Head height used for the observation test. */
   headHeight = 1.1;
+  /** The other watchers: it never walks into one (they queue rather than pass through each other). */
+  others: readonly Watcher[] = [];
   private readonly head = new Vector3();
   private readonly tmp = new Vector3();
 
@@ -49,11 +51,29 @@ export class Watcher extends Entity {
     if (p.ward) {
       this.setState('return');
       this.moveTo(this.home, this.speed * 0.7, dt, ctx, 20);
+      this.keepApart();
       return;
     }
     this.setState('creep');
-    const remaining = this.moveTo(p.pos, this.speed, dt, ctx, 20);
+    this.moveTo(p.pos, this.speed, dt, ctx, 20);
+    this.keepApart();
     this.face(p.pos, dt, 30);
+    const remaining = Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
     if (remaining < this.reach && !p.dead) ctx.catchPlayer(this.id);
+  }
+
+  /** Takes back this tick's step if it walked into another watcher (it waits behind instead). */
+  private keepApart(): void {
+    for (const o of this.others) {
+      if (o === this) continue;
+      const min = this.radius + o.radius;
+      const now = Math.hypot(this.pos.x - o.pos.x, this.pos.z - o.pos.z);
+      if (now >= min) continue;
+      if (now < Math.hypot(this.prevPos.x - o.pos.x, this.prevPos.z - o.pos.z)) {
+        this.pos.x = this.prevPos.x;
+        this.pos.z = this.prevPos.z;
+        return;
+      }
+    }
   }
 }

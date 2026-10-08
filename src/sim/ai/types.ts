@@ -56,7 +56,7 @@ export interface AIContext {
   dt: number;
   player: PlayerView;
   noises: readonly NoiseEvent[];
-  /** Whether the player is currently looking at a point (fixed sim-side view cone + LOS). */
+  /** Whether the player can see a point: on screen (the camera frustum, see onScreen) and in line of sight. */
   isObserved(pos: Vector3, radius?: number): boolean;
   /** Entity reached the player: triggers the blackout. */
   catchPlayer(by: string): void;

@@ -27,7 +27,7 @@ export const L: Lines = {
   v_hello3: { who: V, text: 'Kolesár ťa dnes ešte potrápi, uvidíš.' },
   v_pour: { who: V, text: 'Hneď to bude. Zapíšem vám to.' },
   /** In the frozen pub, when she hands you the keys (no recording: subtitle only). */
-  v_keys: { who: V, text: 'Kľúče? Na. A už choď.' },
+  v_keys: { who: V, text: 'Na. A už choď.' },
   v_malinovka: { who: V, text: 'Malinovku? Čo ti je, chlapče, nie si chorý?' },
   v_chlieb: { who: V, text: 'Chlieb s masťou a cibuľou. Aby ťa nepoložilo.' },
   v_nothing: { who: V, text: 'Tak mi tu nestoj, keď nič nechceš.' },
@@ -134,6 +134,7 @@ export const L: Lines = {
   t_frozen: { who: null, text: 'Pivo z pípy visí vo vzduchu.' },
   t_clock2: { who: null, text: 'Hodiny nemajú ručičky.' },
   t_tv2: { who: null, text: 'Televízor ukazuje túto krčmu. Zhora. Stojím tam… a za mnou…' },
+  t_ask_keys: { who: null, text: '„Vierka… daj mi, prosím ťa, kľúče od dverí."' },
   t_keys: { who: null, text: 'Kľúče. Studené ako ľad.' },
   t_door_closed: { who: null, text: '„Zatvárame." Zamknuté.' },
   t_door_open: { who: null, text: 'Za dverami nie je ulica.' },

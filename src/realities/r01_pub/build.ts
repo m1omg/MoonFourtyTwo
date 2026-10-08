@@ -60,6 +60,8 @@ export interface Pub {
   lampMeshes: Mesh[];
   barLight: PointLight;
   wcLight: PointLight;
+  /** The little lamp beside the WC door, on the pub side (its globe is among lampMeshes). */
+  wcSconce: PointLight;
   /** The WC's ceiling lamp (its glass). */
   wcBulb: Mesh;
   streetLights: PointLight[];
@@ -173,6 +175,11 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   });
   const trim = mats.get('trim', { proc: 'planks', color: 0x2a1a10, uvScale: 1, surface: 'wood' });
   const doorMat = darkWood.material;
+  // the cubicle's door: planks as big as the partitions' (not one texture stretched over the leaf)
+  const doorUv = darkWood.uvScale;
+  // the WC and street doors: worn veneer, lighter than the planks (those were a black slab in the
+  // dim light by the walls)
+  const doorWood = counterTop;
 
   // ───────── room shell ─────────
   b.floor(-6, -4.5, 6, 4.5, 0, floorTiles);
@@ -560,8 +567,21 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   // the cubicle: its door is hinged by the side wall and opens inwards, clear of the bowl
   b.wall(-7.8, -1.5, -7.8, 0.2, 0, 2.1, darkWood, 0.04);
   b.wall(-9.0, -1.5, -8.55, -1.5, 0, 2.1, darkWood, 0.04);
-  const stallDoor = new Door(scope, game.world, [-7.85, 0, -1.5], Math.PI, 0.7, 2.0, doorMat, 1, 0.04);
+  const stallDoor = new Door(
+    scope,
+    game.world,
+    [-7.85, 0, -1.5],
+    Math.PI,
+    0.7,
+    2.0,
+    doorMat,
+    1,
+    0.04,
+    doorUv,
+  );
   scene.add(stallDoor.pivot);
+  // the corner post the door hangs on (it also hides the gap at the hinge)
+  b.box([-7.86, 0, -1.54], [-7.78, 2.1, -1.46], darkWood);
   // the bowl and cistern, a urinal, the washbasin under the mirror, the plate outside
   wcFixtures(scope, scene, b);
   const mirror = new Mesh(
@@ -573,21 +593,59 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
   );
   mirror.position.set(-7.9, 1.45, -3.09);
   scene.add(mirror);
-  // one frosted ceiling lamp, cold and a little too bright, as in every pub toilet
+  // one frosted ceiling lamp, cold and a little too bright, as in every pub toilet; in the middle
+  // of the room, in front of the cubicle (in the plane of its door, it left the door black)
   const wcLight = new PointLight(0xe0f0ff, 5.5, 6, 1.6);
-  wcLight.position.set(-7.5, 2.4, -1.5);
+  wcLight.position.set(-7.55, 2.4, -2.2);
   scene.add(wcLight);
   const wcBulb = new Mesh(
     scope.add(new SphereGeometry(0.13, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI)),
     scope.add(new MeshBasicMaterial({ color: 0xe8f2ff, toneMapped: false })),
   );
-  wcBulb.position.set(-7.5, 2.6, -1.5);
+  wcBulb.position.set(-7.55, 2.6, -2.2);
   scene.add(wcBulb);
-  const wcDoor = new Door(scope, game.world, [-6.0, 0, -0.75], Math.PI / 2, 0.9, 2.08, doorMat, 1, 0.05);
+  const wcDoor = new Door(
+    scope,
+    game.world,
+    [-6.0, 0, -0.75],
+    Math.PI / 2,
+    0.9,
+    2.08,
+    doorWood.material,
+    1,
+    0.05,
+    doorWood.uvScale,
+  );
   scene.add(wcDoor.pivot);
+  // a little lamp on the pub side, over the WC plate: that corner is far from every pendant
+  const sconceArm = new Mesh(scope.add(new BoxGeometry(0.12, 0.025, 0.025)), trim.material);
+  sconceArm.position.set(-5.84, 2.08, -0.42);
+  const sconcePlate = new Mesh(scope.add(new BoxGeometry(0.02, 0.14, 0.1)), trim.material);
+  sconcePlate.position.set(-5.89, 2.08, -0.42);
+  const sconceGlobe = new Mesh(
+    scope.add(new SphereGeometry(0.06, 14, 10)),
+    scope.add(new MeshBasicMaterial({ color: 0xffe2b8, toneMapped: false })),
+  );
+  sconceGlobe.position.set(-5.77, 2.02, -0.42);
+  scene.add(sconceArm, sconcePlate, sconceGlobe);
+  lampMeshes.push(sconceGlobe);
+  const wcSconce = new PointLight(0xffd6a8, 0.9, 3.5, 1.6);
+  wcSconce.position.set(-5.74, 1.98, -0.42);
+  scene.add(wcSconce);
 
   // ───────── front door + facade ─────────
-  const frontDoor = new Door(scope, game.world, [frontDoorX - 0.5, 0, 4.5], 0, 1.0, 2.08, doorMat, -1, 0.06);
+  const frontDoor = new Door(
+    scope,
+    game.world,
+    [frontDoorX - 0.5, 0, 4.5],
+    0,
+    1.0,
+    2.08,
+    doorWood.material,
+    -1,
+    0.06,
+    doorWood.uvScale,
+  );
   scene.add(frontDoor.pivot);
 
   // window figure (outside, under the lamp across the street) and the TV-only figure (R2)
@@ -678,6 +736,7 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
     lampMeshes,
     barLight,
     wcLight,
+    wcSconce,
     wcBulb,
     streetLights,
     windowFigure,

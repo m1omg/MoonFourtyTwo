@@ -58,6 +58,7 @@ import {
 import { wallClockMs } from '../core/time.ts';
 import { Handheld } from '../world/objects/handheld.ts';
 import { dangerNear } from '../sim/ai/danger.ts';
+import { onScreen } from '../sim/ai/observe.ts';
 import type { DebugOptions } from './debug.ts';
 
 const _look = new Vector3();
@@ -559,11 +560,15 @@ export class Game {
     this.grade = NEUTRAL_GRADE;
   }
 
-  saveCheckpoint(cp: string): void {
+  /**
+   * @param evenNearDanger save at once although a threat is near (for progress that must not be
+   *   lost, when the checkpoint wakes you somewhere safe, not where you stand)
+   */
+  saveCheckpoint(cp: string, evenNearDanger = false): void {
     this.checkpoint = cp;
     if (this.debug.test && !this.debug.saves) return;
     // never an autosave with something dangerous beside you: it waits until they are away
-    if (dangerNear(this.entities, this.player.pos)) {
+    if (!evenNearDanger && dangerNear(this.entities, this.player.pos)) {
       this.pendingSave = cp;
       return;
     }
@@ -1099,12 +1104,11 @@ export class Game {
         if (game.mode !== 'play') return false;
         const v = game.view;
         _to.subVectors(pos, v.eye);
-        const d = _to.length();
-        if (d < 0.6) return true;
-        _to.divideScalar(d);
-        // fixed sim-side view cone (independent of screen aspect / FOV setting)
-        const half = 0.62 + Math.atan2(radius, d);
-        if (_to.dot(v.lookDir) < Math.cos(half)) return false;
+        if (_to.length() < 0.6) return true;
+        // on screen means observed: the camera's own frustum, from the sim's view (a narrower cone
+        // let things at the sides of the screen move in plain sight)
+        const cam = game.renderer.camera;
+        if (!onScreen(_to, v.lookDir, game.player.yaw, cam.fov, cam.aspect, radius)) return false;
         return game.world.lineOfSight(v.eye, pos);
       },
       catchPlayer(by: string) {

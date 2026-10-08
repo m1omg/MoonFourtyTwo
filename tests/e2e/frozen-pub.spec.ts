@@ -114,12 +114,15 @@ test('a blackout in the frozen pub wakes you by Ežo, not in a loop in the WC', 
   expect(errors, errors.join('\n')).toHaveLength(0);
 });
 
-test('Vierka hands you the keys when you come to the bar', async ({ page }, info) => {
+test('you ask Vierka for the keys at the bar, and a blackout later does not take them', async ({
+  page,
+}, info) => {
   test.skip(info.project.name !== 'desktop');
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('./#r1:frozen&test&q=low&seed=5');
+  // with saves on: a blackout reloads what was saved
+  await page.goto('./#r1:frozen&test&saves&q=low&seed=5');
   await page.waitForFunction(() => (window as unknown as { __mf42: Api }).__mf42?.ready === true, null, {
     timeout: 180_000,
   });
@@ -127,10 +130,21 @@ test('Vierka hands you the keys when you come to the bar', async ({ page }, info
   await a.sim(0.5);
   expect((await a.info()).flags['pub.keys'] ?? 0).toBe(0);
 
-  // stand at the counter in front of her and do nothing else: she gives them to you
+  // stand at the counter in front of her and do nothing else: you ask, she gives them to you
   await a.teleport(-1.4, -2.0, 0);
   const subtitle = () => page.evaluate(() => document.querySelector('.subtitles')?.textContent ?? '');
-  expect(await until(page, async () => (await subtitle()).includes('Kľúče? Na'), 25, 0.25)).toBe(true);
-  expect(await until(page, async () => ((await a.info()).flags['pub.keys'] ?? 0) === 1, 10, 0.25)).toBe(true);
+  expect(await until(page, async () => ((await a.info()).flags['pub.keys'] ?? 0) === 1, 2, 0.1)).toBe(true);
+  expect(await until(page, async () => (await subtitle()).includes('kľúče od dverí'), 25, 0.25)).toBe(true);
+  expect(await until(page, async () => (await subtitle()).includes('A už choď'), 15, 0.25)).toBe(true);
+
+  // black out (too much to drink): you wake with the keys
+  await page.evaluate(() =>
+    (window as unknown as { __mf42: Api & { setBac(v: number): void } }).__mf42.setBac(3.2),
+  );
+  for (let i = 0; i < 8; i++) await a.sim(0.25);
+  await page.waitForFunction(() => (window as unknown as { __mf42: Api }).__mf42.mode === 'play', null, {
+    timeout: 120_000,
+  });
+  expect((await a.info()).flags['pub.keys'] ?? 0).toBe(1);
   expect(errors, errors.join('\n')).toHaveLength(0);
 });

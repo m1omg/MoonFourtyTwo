@@ -86,8 +86,6 @@ const reality: RealityModule = {
       jukebox: -1,
       ezoDrinkT: 0,
       keys: game.flags.has('pub.keys'),
-      /** Vierka is handing you the keys (see vierkaGivesKeys). */
-      giving: false,
       /** 0..1 while the key ring slides from her apron onto the counter; -1 otherwise. */
       keySlide: -1,
     };
@@ -355,13 +353,13 @@ const reality: RealityModule = {
     // frozen-pub interactions
     I.add({
       id: 'keys',
-      // she gives them to you herself when you come to the bar; asking her works too
+      // coming to the bar in front of her asks her too
       pos: pub.vierkaSpot.clone().add(new Vector3(0, 1.25, 0.1)),
       radius: 0.6,
       range: 3.5,
       ignoreOcclusion: true,
-      prompt: 'Poprosiť Vierku o kľúče',
-      enabled: () => s.phase === 'r2' && !s.keys && !s.giving,
+      prompt: 'Vypýtať si od Vierky kľúče',
+      enabled: () => s.phase === 'r2' && !s.keys,
       onUse: () => vierkaGivesKeys(),
     });
     for (const [id, item, count, x] of [
@@ -398,28 +396,32 @@ const reality: RealityModule = {
       await solo(fn);
     }
     /**
-     * Vierka comes to for a moment: she looks up at you, says a word and slides the key ring from
-     * her apron across the counter, then stands still again. Once; if a line got in the way, the
-     * next try (walking up or asking) does it.
+     * You ask Vierka for the keys: she comes to for a moment, says a word and slides the key ring
+     * from her apron across the counter, then stands still again. The keys are yours (and saved:
+     * a blackout later wakes you at the table with them) the moment you ask; the exchange plays
+     * out as soon as nobody else is talking.
      */
     function vierkaGivesKeys(): void {
-      if (s.keys || s.giving) return;
-      s.giving = true;
+      if (s.keys) return;
+      s.keys = true;
+      game.flags.put('pub.keys');
+      game.saveCheckpoint(game.checkpoint, true);
+      game.ui.toast('Kľúče od krčmy');
       void soloWhenFree(async () => {
-        if (s.keys) return;
         if (pub.vierka) pub.vierka.frozen = false;
+        await say('t_ask_keys');
         s.keySlide = 0;
         await say('v_keys');
         s.keySlide = -1;
-        s.keys = true;
-        game.flags.put('pub.keys');
         if (pub.vierkaKeys) pub.vierkaKeys.visible = false;
         game.synth.click(pub.vierkaSpot, 3200, 0.12);
         await game.clock.wait(0.4);
         if (pub.vierka) pub.vierka.frozen = true;
         await say('t_keys');
       }).finally(() => {
-        s.giving = false;
+        if (pub.vierka) pub.vierka.frozen = true;
+        s.keySlide = -1;
+        if (pub.vierkaKeys) pub.vierkaKeys.visible = false;
       });
     }
     const keysOnApron = pub.vierkaKeys?.position.clone() ?? new Vector3();
@@ -618,6 +620,10 @@ const reality: RealityModule = {
           await solo(() => say('t_door_closed'));
           return;
         }
+        // out you go: nothing in here gets you any more (their table is right by the door)
+        for (const w of watchers) w.awake = false;
+        s.lightsOff = false;
+        s.flickerAt = Infinity;
         d.locked = false;
         d.open(90);
         await solo(async () => {
@@ -670,6 +676,7 @@ const reality: RealityModule = {
       w.home.copy(w.pos);
       w.canBeSeen = () => !s.lightsOff;
       w.headHeight = 1.0;
+      w.others = watchers;
       // each time they get you they come a little slower (down to about the story pace)
       const ease = Math.max(0.6, 0.85 ** game.caughtHere);
       w.speed = (game.settings.difficulty === 'story' ? 0.45 : 0.75) * ease;
@@ -709,6 +716,7 @@ const reality: RealityModule = {
       pub.tvFigure.visible = true;
       for (const w of watchers) w.awake = false;
       for (const l of pub.lampLights) l.color.setHex(0xcfe0ff);
+      pub.wcSconce.color.setHex(0xcfe0ff);
       for (const l of pub.streetLights) l.intensity = 0;
       pub.neon.mesh.visible = false;
       pub.windowFigure.visible = false;
@@ -1000,9 +1008,8 @@ const reality: RealityModule = {
               void solo(() => say('e_loop'));
             }
           }
-          // come to the bar in front of Vierka and she hands you the keys
-          if (!s.keys && !s.giving && Math.hypot(p.x - pub.vierkaSpot.x, p.z - pub.vierkaSpot.z) < 2.4)
-            vierkaGivesKeys();
+          // come to the bar in front of Vierka and you ask her for the keys
+          if (!s.keys && Math.hypot(p.x - pub.vierkaSpot.x, p.z - pub.vierkaSpot.z) < 2.4) vierkaGivesKeys();
           if (s.keySlide >= 0 && pub.vierkaKeys) {
             s.keySlide = Math.min(1, s.keySlide + dt / 0.8);
             const k = s.keySlide * s.keySlide * (3 - 2 * s.keySlide);
@@ -1051,6 +1058,7 @@ const reality: RealityModule = {
         // lamps flicker in the frozen pub
         const off = s.lightsOff;
         for (const l of pub.lampLights) l.intensity = off ? 0 : s.phase === 'r2' ? 1.6 : 3.0;
+        pub.wcSconce.intensity = off ? 0 : s.phase === 'r2' ? 0.5 : 0.9;
         for (const m of pub.lampMeshes) m.visible = !off;
         pub.barLight.intensity = off ? 0 : s.phase === 'r2' ? 1.8 : 3.2;
         // entities: watchers move the regulars' meshes

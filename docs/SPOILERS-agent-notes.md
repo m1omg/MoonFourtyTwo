@@ -87,10 +87,26 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
   beer mat for shot rounds, and Ežo's mug drains as he sips.
 - **Vierka.** She got a procedural apron with a key ring (her generated model has none, but the
   keys are "zo zástery"). The ring hides once taken.
-  - She hands the keys over herself (owner's request, 2026-10-07): walking up to the bar within
-    2.4 m of her (or "Poprosiť Vierku o kľúče") runs `vierkaGivesKeys()`. She unfreezes, looks
-    at you, says `v_keys` (subtitle only), the ring slides onto the counter, you get
-    `pub.keys`, and she freezes again. Tested in `tests/e2e/frozen-pub.spec.ts`.
+  - You ask, she hands them over (owner's requests, 2026-10-07/08): walking up to the bar
+    within 2.4 m of her (or "Vypýtať si od Vierky kľúče") runs `vierkaGivesKeys()`. You get
+    `pub.keys` at once and it is **saved at once** (`saveCheckpoint(cp, evenNearDanger)`):
+    before, an OKNO on the way to the door reloaded a save without the keys, which read as
+    "the keys can't be taken". Then `t_ask_keys` (you ask), she unfreezes, `v_keys`, the ring
+    slides onto the counter, a toast, `t_keys`. Tested in `tests/e2e/frozen-pub.spec.ts`
+    (keys survive an alcohol OKNO with `&saves`).
+  - Opening the front door with the keys puts the watchers to sleep and stops the flicker:
+    Fero's seat is 1.4 m from the door, so the exit (which takes a few seconds of lines and a
+    fade with your back to them) was a near-certain catch.
+- **Watchers seen = on screen.** `isObserved` used a fixed 35.5° cone while a 16:9 screen
+  shows ~52° to each side, so the regulars glided in plain sight at the screen's sides. It now
+  tests the camera's frustum (`onScreen` in `src/sim/ai/observe.ts`, unit-tested). This also
+  applies to the r5 lifeguard and the r11 shades. Watchers also keep 0.8 m apart (`others`):
+  a step into the other is taken back, so they queue instead of walking through each other.
+- **Doors.** The WC lamp sat in the plane of the cubicle door, which left the door unlit
+  (black); it hangs mid-room now. The pub side of the WC door was black too (dark wood, far
+  from every pendant): the WC and street doors are worn veneer (`counterTop`), and a sconce
+  (`wcSconce`, its globe among `lampMeshes`) lights the door and the "WC" plate. `Door` takes
+  an optional `uvScale` so the texture tiles like the walls instead of stretching.
 
 **Characters (`src/npc/Character.ts`)**
 
