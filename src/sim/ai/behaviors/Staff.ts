@@ -19,6 +19,8 @@ export class Staff extends Entity {
   private lostFor = 0;
   private seatedNear = 0;
   private servedCooldown = 0;
+  /** Seconds on the way to the current patrol point (a fresh one after 25 s: stuck). */
+  private targetAge = 0;
 
   constructor(id: string) {
     super(id, 'staff');
@@ -49,7 +51,10 @@ export class Staff extends Entity {
             break;
           }
         } else this.seatedNear = Math.max(0, this.seatedNear - dt * 0.5);
-        if (this.state === 'idle' || this.pos.distanceTo(this.target) < 0.6 || this.stateTime > 25)
+        this.targetAge += dt;
+        // (not stateTime: it never resets while she patrols, so after 25 s she picked a new point
+        // every tick and walked on the spot)
+        if (this.state === 'idle' || this.pos.distanceTo(this.target) < 0.6 || this.targetAge > 25)
           this.pickTarget(ctx);
         this.setState('patrol');
         this.moveTo(this.target, this.patrolSpeed, dt, ctx);
@@ -108,18 +113,25 @@ export class Staff extends Entity {
   }
 
   private pickTarget(ctx: AIContext): void {
+    this.targetAge = 0;
     if (!this.waypoints.length) {
       this.target.copy(this.pos);
       return;
     }
     // prefer waypoints within ~20 m so she stays around
-    for (let i = 0; i < 8; i++) {
-      const w = ctx.rng.pick(this.waypoints);
-      if (w.distanceTo(this.pos) < 22) {
-        this.target.copy(w);
-        return;
-      }
+    let w = ctx.rng.pick(this.waypoints);
+    for (let i = 0; i < 8 && w.distanceTo(this.pos) >= 22; i++) w = ctx.rng.pick(this.waypoints);
+    this.target.copy(w);
+    // a point inside a pillar's or a partition's blocked cells can never be reached: the nearest
+    // walkable cell instead
+    const nav = ctx.nav;
+    if (!nav) return;
+    const [cx, cz] = nav.toCell(w.x, w.z);
+    if (nav.get(cx, cz) & this.navMask) return;
+    const c = nav.nearestWalkable(cx, cz, this.navMask, 4);
+    if (c) {
+      const [x, z] = nav.cellCenter(c[0], c[1]);
+      this.target.set(x, w.y, z);
     }
-    this.target.copy(ctx.rng.pick(this.waypoints));
   }
 }

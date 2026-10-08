@@ -71,6 +71,9 @@ const reality: RealityModule = {
       still: 0,
       last: new Vector3(),
       riseIn: 0,
+      /** The eon going by now advances the lights (the last ones don't). */
+      eonCounts: false,
+      eonEndAt: -99,
       busT: 0,
       onPath: false,
       left: false,
@@ -89,12 +92,24 @@ const reality: RealityModule = {
     let clock = 0;
     const after = (s: number, fn: () => void) => later.push({ at: clock + s, fn });
     const stoppers: Array<() => void> = [];
+    // the two lights hang ~230 m out: the camera has to see that far here
+    const cam = game.renderer.camera;
+    const far0 = cam.far;
+    cam.far = 320;
+    cam.updateProjectionMatrix();
     scope.onDispose(() => {
+      cam.far = far0;
+      cam.updateProjectionMatrix();
       stoppers.forEach((f) => f());
       game.audio.setLag(0);
       game.fx.frost = 0;
     });
     sea.shots.forEach((g, i) => (g.visible = !F(`shot${i}`)));
+    // every shot taken is either drunk to an eon or still in your hand: one that was neither (a
+    // save landed between drinking it and its eon) comes back, or the chapter couldn't be finished
+    const taken = sea.shots.filter((_, i) => F(`shot${i}`)).length;
+    const owed = taken - done - game.inventory.count('cierne');
+    if (owed > 0) game.inventory.add('cierne', owed);
 
     // ───────── the crawlers ─────────
     const crawlers = Array.from({ length: sea.crawlers.count }, (_, i) => {
@@ -111,7 +126,10 @@ const reality: RealityModule = {
         if (n >= count) break;
         if (!c.submerged) continue;
         const dz = (game.rng.chance(0.5) ? -1 : 1) * game.rng.range(5, 9);
-        const z = clamp(p.z + dz, HEAD.z0 + 1, PIER.z1 - 2);
+        let z = clamp(p.z + dz, HEAD.z0 + 1, PIER.z1 - 2);
+        // clamped at an end of the pier it could come up right beside you: the other way, or not
+        if (Math.abs(z - p.z) < 5) z = clamp(p.z - dz, HEAD.z0 + 1, PIER.z1 - 2);
+        if (Math.abs(z - p.z) < 5) continue;
         const side = game.rng.chance(0.5) ? -1 : 1;
         c.rise(side * (deckHalfWidth(z) + 0.15), z);
         n++;
@@ -140,6 +158,15 @@ const reality: RealityModule = {
       st.skipT = 0;
       st.phaseFrom = st.phase;
       st.wheelsFrom = st.wheels;
+      // the drink is down: this eon counts now (saved), not only once it has gone by
+      st.eonCounts = st.skips < SKIPS;
+      if (st.eonCounts) {
+        st.skips++;
+        put(`skip${st.skips}`);
+      }
+      checkpointHere();
+      // you can neither move nor look away while it goes by: nothing comes for you meanwhile
+      for (const c of crawlers) c.sink();
       game.player.frozen = true;
       // to the lights, while an eon goes by
       game.rig.lockTarget = { yaw: 0, pitch: 0.03 };
@@ -150,18 +177,15 @@ const reality: RealityModule = {
     const stepEon = (dt: number) => {
       st.skipT += dt;
       const k = smooth(clamp(st.skipT / (EON - 0.4), 0, 1));
-      const turns = st.skips < SKIPS ? 1 : 0;
+      const turns = st.eonCounts ? 1 : 0;
       st.phase = st.phaseFrom + TURN * turns * k;
       st.wheels = st.wheelsFrom + 7 * turns * k;
       if (st.skipT < EON) return;
       st.skipT = -1;
       game.player.frozen = false;
       game.rig.lockTarget = null;
-      if (st.skips < SKIPS) {
-        st.skips++;
-        put(`skip${st.skips}`);
-      }
       game.fx.frost = 0.06 * st.skips;
+      st.eonEndAt = clock;
       // whoever stood still that long is not alone on the pier any more
       riseNear(1 + st.skips);
       if (st.skips === 1) line('t_skip1');
@@ -213,7 +237,10 @@ const reality: RealityModule = {
           else line('t_cierne');
           if (!st.hints.has('toast')) {
             st.hints.add('toast');
-            game.ui.toast(game.touch ? 'Vypiješ ho tlačidlom „Piť"' : 'Vypiješ ho klávesom Q', 4000);
+            game.ui.toast(
+              game.touch ? 'Vypiješ ho tlačidlom „Piť"' : `Vypiješ ho klávesom ${game.keyLabel('drink')}`,
+              4000,
+            );
           }
         },
       }),
@@ -287,7 +314,8 @@ const reality: RealityModule = {
         if (p.z < -18) hint('t_lights');
         if (GAPS.some(([z0, z1]) => p.z < z1 + 1.6 && p.z > z0 - 1.6)) hint('t_gap');
         if (p.z < -40) hint('t_wheels');
-        if (st.skips > 0 && p.z < -30) hint('t_eyes');
+        // (a few seconds after an eon: not over its own line about the lights)
+        if (st.skips > 0 && p.z < -30 && clock - st.eonEndAt > 6) hint('t_eyes');
         if (!F('bench') && Math.abs(p.z + 50) < 2.5) {
           put('bench');
           game.saveCheckpoint('bench');

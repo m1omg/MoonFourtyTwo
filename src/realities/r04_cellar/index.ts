@@ -30,7 +30,7 @@ import type { KitMaterial } from '../../world/kit/Builder.ts';
 import { Props } from '../../world/props.ts';
 import { instanceModel, type InstanceXform } from '../../world/instancing.ts';
 import { textTexture } from '../../world/proceduralTextures.ts';
-import { Character } from '../../npc/Character.ts';
+import { ARM_SHOVEL, Character } from '../../npc/Character.ts';
 import { NavGrid, Area } from '../../sim/ai/nav/NavGrid.ts';
 import { Hisser } from '../../sim/ai/behaviors/Hisser.ts';
 import { LightPool, type Fixture } from '../../world/lightPool.ts';
@@ -544,15 +544,23 @@ const reality: RealityModule = {
     wallLamp(2.5, -47.85, 0, 1, WARM, 4.5);
     wallLamp(-3.85, -44, 1, 0, WARM, 3.5);
     const hanging: InstanceXform[] = [];
-    const hangLamp = (x: number, z: number, ceil: number, intensity: number) => {
+    const cordMat = scope.add(new MeshStandardMaterial({ color: 0x1a1816, roughness: 0.8 }));
+    /** A caged lamp at `ceil`; with `roof` above it, on a cord up to the roof. */
+    const hangLamp = (x: number, z: number, ceil: number, intensity: number, roof = ceil) => {
       hanging.push({ x, y: ceil, z, scale: 0.55 });
       fixtures.push({ pos: new Vector3(x, ceil - 0.35, z), color: WARM, intensity, distance: 11 });
+      if (roof > ceil + 0.05) {
+        const cord = new Mesh(scope.add(new CylinderGeometry(0.008, 0.008, roof - ceil, 6)), cordMat);
+        cord.position.set(x, (roof + ceil) / 2, z);
+        scene.add(cord);
+      }
     };
     hangLamp(0, 2.6, 2.6, 4); // landing
     hangLamp(0, -7.5, F + 2.5, 6);
-    hangLamp(5.2, -52, F + 3.6, 8);
-    hangLamp(-4.5, -55.5, F + 3.6, 7);
-    hangLamp(-0.5, -50.5, F + 3.6, 5);
+    // the boiler room is 5 m high: these hang on cords
+    hangLamp(5.2, -52, F + 3.6, 8, F + 5);
+    hangLamp(-4.5, -55.5, F + 3.6, 7, F + 5);
+    hangLamp(-0.5, -50.5, F + 3.6, 5, F + 5);
     const sconceSrc = props
       .gltf('industrial_caged_sconce')
       ?.scene.getObjectByName('industrial_caged_sconce_a');
@@ -668,6 +676,8 @@ const reality: RealityModule = {
         spade.removeFromParent();
         ezo.attach('RightHand', spade, [0.0, -0.32, 0.04], [0, 0, 0]);
       }
+      // his stroke swings the spade into the coal (the drinking arm lifted it to his mouth)
+      ezo.drinkPose = ARM_SHOVEL;
     }
     b.box([EZO_POS.x - 0.4, F, EZO_POS.z - 0.4], [EZO_POS.x + 0.4, F + 2, EZO_POS.z + 0.4], null);
 
@@ -718,6 +728,16 @@ const reality: RealityModule = {
         st.busy = false;
       }
     }
+    /** Like solo, but lets a line in progress finish first instead of dropping `fn`. */
+    async function soloWhenFree(fn: () => Promise<void>): Promise<void> {
+      try {
+        await game.clock.until(() => !st.busy, 30);
+      } catch (e) {
+        if (!(e instanceof Cancelled)) console.error(e);
+        return;
+      }
+      await solo(fn);
+    }
     const stoppers: Array<() => void> = [];
     scope.onDispose(() => stoppers.forEach((f) => f()));
     const I = game.interactions;
@@ -740,8 +760,11 @@ const reality: RealityModule = {
         bottles.count = 2;
         necks.count = 2;
         game.synth.clink(new Vector3(-1.6, F + 0.4, -4.4), 0.6);
-        void solo(() => say('t_bottles'));
-        game.ui.toast(game.touch ? 'Fľašu hodíš tlačidlom „Hodiť"' : 'Fľašu hodíš klávesom G', 4000);
+        void soloWhenFree(() => say('t_bottles'));
+        game.ui.toast(
+          game.touch ? 'Fľašu hodíš tlačidlom „Hodiť"' : `Fľašu hodíš klávesom ${game.keyLabel('throw')}`,
+          4000,
+        );
       },
     });
     if (game.flags.has('cellar.bottles')) {

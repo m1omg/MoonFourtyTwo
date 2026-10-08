@@ -46,7 +46,7 @@ const reality: RealityModule = {
     const film = makeCinematic(scope);
     scene.add(film.mesh);
 
-    const st = { phase: 'film' as Phase, t: 0, seated: false };
+    const st = { phase: 'film' as Phase, t: 0, seated: false, townSaid: false };
     const onErr = (e: unknown) => {
       if (!(e instanceof Cancelled)) console.error(e);
     };
@@ -128,10 +128,13 @@ const reality: RealityModule = {
           music.play(TUNES.esteJedno!, new Vector3(5.4, 1, 0.8), 0.25);
           st.phase = 'walk';
           game.player.frozen = false;
+          // seen the film once: Continue starts on the square
+          game.saveCheckpoint('square');
           await game.clock.wait(1.5);
           await say('t_town');
           await game.clock.wait(0.6);
           await say('t_sign');
+          st.townSaid = true;
         };
         if (cp === 'square') {
           st.t = FILM_SECONDS;
@@ -156,6 +159,8 @@ const reality: RealityModule = {
         if (st.phase === 'walk' && p.z < 4.1 && p.z > -4.4 && Math.abs(p.x) < 6) {
           st.phase = 'inside';
           void (async () => {
+            // the square's lines first (walking straight in cut them off)
+            await game.clock.until(() => st.townSaid, 12);
             await game.clock.wait(0.6);
             await say('v12_1');
             await game.clock.wait(0.8);

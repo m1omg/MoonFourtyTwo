@@ -4,6 +4,9 @@ import type { AIContext, NoiseEvent } from '../types.ts';
 import { hearNoise } from '../perception.ts';
 import { Area } from '../nav/NavGrid.ts';
 
+const _from = new Vector3();
+const _to = new Vector3();
+
 /**
  * "Syčiak" — lives in the pipes and hunts by sound. Hidden in a vent until it hears something,
  * then slithers to the noise; footsteps close by turn investigation into a hunt. Steam stuns it.
@@ -103,7 +106,8 @@ export class Hisser extends Entity {
         } else this.quiet += dt;
         this.moveTo(this.target, this.huntSpeed, dt, ctx, 10);
         const dp = Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
-        if (dp < 0.9 && !p.dead && !p.hidden) ctx.catchPlayer(this.id);
+        // within reach and nothing between: a wall's other side is not within reach
+        if (dp < 0.9 && !p.dead && !p.hidden && this.canReach(ctx)) ctx.catchPlayer(this.id);
         if (this.quiet > 4) this.setState('investigate');
         break;
       }
@@ -138,5 +142,13 @@ export class Hisser extends Entity {
       this.trail.unshift(this.pos.clone());
       if (this.trail.length > 36) this.trail.pop();
     }
+  }
+
+  /** Nothing solid between its head and the player's chest (catches never go through a wall). */
+  private canReach(ctx: AIContext): boolean {
+    const p = ctx.player;
+    _from.set(this.pos.x, this.pos.y + 0.6, this.pos.z);
+    _to.set(p.pos.x, p.pos.y + 1.0, p.pos.z);
+    return ctx.world.lineOfSight(_from, _to);
   }
 }

@@ -45,8 +45,8 @@ const reality: RealityModule = {
   index: 11,
   title: 'Posledná runda',
   async create(ctx) {
-    const { game, scene, scope, builder: b } = ctx;
-    const pub = await buildPub(ctx, { outdoor: false });
+    const { game, scene, scope } = ctx;
+    const pub = await buildPub(ctx, { outdoor: false, regulars: false });
     await loadVoiceIndex();
     const ezo = pub.ezo;
     const say = async (id: string) => {
@@ -170,7 +170,7 @@ const reality: RealityModule = {
     // ───────── where the pub ends: a ragged, glowing edge, then nothing ─────────
     const dissolve = makeDissolve([0, 0, -1], EDGE);
     dissolve.apply(scene);
-    b.box([-6, 0, -EDGE + 0.1], [6, 3, -EDGE + 0.3], null);
+    // (no wall here: a collider would hide the shades beyond it from your eyes; tick holds you back)
     // what drifts in the dark beyond
     const debris = (
       [
@@ -274,9 +274,12 @@ const reality: RealityModule = {
     };
 
     // ───────── the talk ─────────
+    /** Ežo's greeting when you arrive: the talk waits for it (they used to cut each other). */
+    let intro: Promise<void> = Promise.resolve();
     const talk = async () => {
       st.busy = true;
       st.phase = 'talk';
+      await intro;
       await game.clock.wait(0.8);
       for (const id of ['e11_1', 'e11_2', 'e11_3', 'e11_4']) {
         await say(id);
@@ -310,10 +313,14 @@ const reality: RealityModule = {
       st.heat = 0.85;
       put('talked');
       line('e11_stoke');
-      stoppers.push(game.synth.drone({ freqs: [43.6, 65.4, 87.3], cutoff: 240, volume: 0.05 }));
+      siegeDrone = game.synth.drone({ freqs: [43.6, 65.4, 87.3], cutoff: 240, volume: 0.05 });
+      stoppers.push(() => siegeDrone?.());
     }
+    let siegeDrone: (() => void) | null = null;
     const endSiege = () => {
       st.phase = 'calm';
+      siegeDrone?.();
+      siegeDrone = null;
       for (const s of shades) s.e.banish();
       game.synth.thud(undefined, 1);
       line('e11_enough');
@@ -401,6 +408,8 @@ const reality: RealityModule = {
       pos: new Vector3(3.05, 0.84, 2.98),
       radius: 0.15,
       prompt: 'Podtácka',
+      // not while Ežo talks: your key would cut him off with a remark about the mat
+      enabled: () => !st.busy,
       onUse: () => line('t_mat'),
     });
 
@@ -471,7 +480,7 @@ const reality: RealityModule = {
           for (const s of shades) s.e.banish();
         } else {
           st.phase = 'arrive';
-          void (async () => {
+          intro = (async () => {
             await game.clock.wait(1.5);
             await say('t_arrive');
             await game.clock.wait(0.8);
@@ -505,7 +514,9 @@ const reality: RealityModule = {
         }
         for (const s of shades) s.e.warmth = st.phase === 'stay' ? 1 : st.heat;
         st.flare = Math.max(0, st.flare - dt * 1.5);
-        if (Math.hypot(p.x - 3.05, p.z - 2.98) < 1.4) hint('t_mat');
+        if (!st.busy && st.phase !== 'arrive' && Math.hypot(p.x - 3.05, p.z - 2.98) < 1.4) hint('t_mat');
+        // where the pub ends: you can't go on into nothing
+        if (p.z < -EDGE + 0.62) p.z = -EDGE + 0.62;
       },
       frame(frameDt, alpha, t) {
         dissolve.time = t;

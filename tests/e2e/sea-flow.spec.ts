@@ -79,18 +79,19 @@ test('the silent sea: three eons of Čierne, the path of light and the window', 
   await a.press('drink');
   await a.sim(1.5);
   await a.press('drink');
+  // (an eon counts, and is saved, as soon as it starts; it takes 3.4 s to go by)
   expect(await skipped(1)).toBe(true);
-  await a.sim(1);
+  await a.sim(4);
   expect(await cierne()).toBe(1);
   expect((await a.info()).flags['more.skip2']).toBeFalsy();
   // then one eon per shot, and the two lights turn a little further each time
   await a.press('drink');
   expect(await skipped(2)).toBe(true);
-  await a.sim(1);
+  await a.sim(4);
   expect(await a.use('cierne:2')).toBe(true);
   await a.press('drink');
   expect(await skipped(3)).toBe(true);
-  await a.sim(1);
+  await a.sim(4);
   // one behind the other now: a path of frozen light leads over the water to the window
   await a.teleport(0, 0.2, -150, 0);
   await a.sim(1);

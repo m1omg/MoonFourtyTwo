@@ -54,6 +54,14 @@ const ARM_DRINK: PoseRot[] = [
   ['RightForeArm', 'x', -115],
   ['RightForeArm', 'y', 30],
 ];
+/** A shovel stroke: the arm swings forward and down, the back bends over the coal. */
+export const ARM_SHOVEL: PoseRot[] = [
+  ['RightArm', 'z', 18],
+  ['RightArm', 'x', -42],
+  ['RightForeArm', 'x', -18],
+  ['Spine02', 'x', 16],
+  ['Spine01', 'x', 8],
+];
 function armHang(drop: number): PoseRot[] {
   return [
     ['RightArm', 'z', drop],
@@ -130,6 +138,8 @@ export class Character {
   walkPhase = 0;
   /** Left forearm raised to carry a tray. */
   carryTray = false;
+  /** What the right arm does when it "drinks" (a shovel stroke for a stoker, see ARM_SHOVEL). */
+  drinkPose: readonly PoseRot[] = ARM_DRINK;
   /** The seated pose at a table and the right arm's rest on it (per character, for tuning). */
   tablePose: readonly PoseRot[] = POSE_SIT_TABLE;
   restArm: readonly PoseRot[] = ARM_REST;
@@ -319,7 +329,8 @@ export class Character {
     const w = this.drink;
     const blended = new Map<string, number>();
     for (const [b, a, deg] of restArm) blended.set(`${b}|${a}`, deg * (1 - w));
-    for (const [b, a, deg] of ARM_DRINK) blended.set(`${b}|${a}`, (blended.get(`${b}|${a}`) ?? 0) + deg * w);
+    for (const [b, a, deg] of this.drinkPose)
+      blended.set(`${b}|${a}`, (blended.get(`${b}|${a}`) ?? 0) + deg * w);
     for (const [key, deg] of blended) {
       const [b, a] = key.split('|') as [string, Axis];
       rots.push([b, a, deg]);
@@ -350,8 +361,10 @@ export class Character {
     }
     rots.push(['neck', 'y', (this.headYaw / D) * 0.4]);
     rots.push(['Head', 'y', (this.headYaw / D) * 0.6]);
-    rots.push(['neck', 'x', -(this.headPitch / D) * 0.4 - w * 4]);
-    rots.push(['Head', 'x', -(this.headPitch / D) * 0.6 - w * 10]);
+    // drinking tips the head back; a shovel stroke doesn't
+    const sip = this.drinkPose === ARM_DRINK ? w : 0;
+    rots.push(['neck', 'x', -(this.headPitch / D) * 0.4 - sip * 4]);
+    rots.push(['Head', 'x', -(this.headPitch / D) * 0.6 - sip * 10]);
 
     // group by bone in hierarchy order
     _rootInv.copy(this.root.getWorldQuaternion(_q)).invert();

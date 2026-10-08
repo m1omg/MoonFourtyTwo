@@ -112,7 +112,14 @@ export const PUB_MODELS = [
 
 const H = 3.0; // ceiling height
 
-export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Promise<Pub> {
+/**
+ * @param opts.regulars false: the card players' bodies don't collide (a reality that hides them
+ *   must not leave two invisible blocks by the stove)
+ */
+export async function buildPub(
+  ctx: RealityCtx,
+  opts: { outdoor: boolean; regulars?: boolean },
+): Promise<Pub> {
   const { game, scene, scope, builder: b, mats } = ctx;
   const props = new Props(game.loader, scene, scope, b);
   await props.load(PUB_MODELS, (p) => ctx.progress(p * 0.7));
@@ -352,16 +359,17 @@ export async function buildPub(ctx: RealityCtx, opts: { outdoor: boolean }): Pro
     vierka.root.add(apron.root);
     vierkaKeys = apron.keys;
   }
+  const regularsCollide = opts.regulars === false ? 'none' : 'box';
   const jano = props.place('jano', {
     pos: [-4.85, 0, 2.15],
     rotY: Math.PI * 0.2,
-    collide: 'box',
+    collide: regularsCollide,
     shrink: 0.1,
   });
   const fero = props.place('fero', {
     pos: [-3.75, 0, 3.05],
     rotY: Math.PI + Math.PI * 0.2,
-    collide: 'box',
+    collide: regularsCollide,
     shrink: 0.1,
   });
 
@@ -938,6 +946,9 @@ function buildStreet(ctx: RealityCtx, props: Props, lights: PointLight[]): void 
   b.box([-30, -1, 40], [30, 10, 41], null);
   b.box([-31, -1, 4.6], [-30, 10, 41], null);
   b.box([30, -1, 4.6], [31, 10, 41], null);
+  // and the south edge past the houses (the facades end at |x| 14; beyond them was a drop)
+  b.box([-30, -1, 4.0], [-14, 10, 4.62], null);
+  b.box([14, -1, 4.0], [30, 10, 4.62], null);
   // night sky dome: dark, cloudless — and starless
   const sky = new Mesh(
     scope.add(new SphereGeometry(80, 24, 16)),

@@ -227,7 +227,10 @@ const reality: RealityModule = {
         game.inventory.add('kacka', 3);
         game.synth.squeak(S.ducks, 0.6);
         line('t_ducks');
-        game.ui.toast(game.touch ? 'Kačičku hodíš tlačidlom „Hodiť"' : 'Kačičku hodíš klávesom G', 4000);
+        game.ui.toast(
+          game.touch ? 'Kačičku hodíš tlačidlom „Hodiť"' : `Kačičku hodíš klávesom ${game.keyLabel('throw')}`,
+          4000,
+        );
       },
     });
     I.add({

@@ -176,7 +176,10 @@ const reality: RealityModule = {
         // in hand, so that Q drinks this and not whatever else you carry
         game.inventory.select(game.inventory.slots.findIndex((sl) => sl.item === 'cierne'));
         line('t_cierne');
-        game.ui.toast(game.touch ? 'Vypiješ ho tlačidlom „Piť"' : 'Vypiješ ho klávesom Q', 4000);
+        game.ui.toast(
+          game.touch ? 'Vypiješ ho tlačidlom „Piť"' : `Vypiješ ho klávesom ${game.keyLabel('drink')}`,
+          4000,
+        );
         game.saveCheckpoint('shelter');
       },
     });

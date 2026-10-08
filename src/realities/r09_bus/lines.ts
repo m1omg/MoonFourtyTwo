@@ -36,6 +36,7 @@ export const L9: Lines = {
   // ── the ticket ──
   r_board: { who: R, text: 'Kontrola cestovných lístkov, prosím!' },
   t_no_ticket: { who: null, text: 'Lístok. Nemám lístok. Ežo mal vždy všetko za mňa...' },
+  t_ticket_unvalidated: { who: null, text: 'Lístok mám. Ale neoznačený.' },
   t_cap: {
     who: null,
     text: 'Ežova baranica, ešte teplá. Vo vnútri papierik: „Lístok máš vpredu, u šoféra. Neboj sa, nehryzie. – E."',

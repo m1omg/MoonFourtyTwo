@@ -376,7 +376,10 @@ const reality: RealityModule = {
 
     // ───────── the waitress ─────────
     const staff = new Staff('obsluha');
-    staff.place(10, 0, 8);
+    // her start, on a walkable cell (10, 8 itself lies in a low partition)
+    const staffCell = nav.nearestWalkable(...nav.toCell(10, 8), Area.WALK, 6);
+    const [sx, sz] = staffCell ? nav.cellCenter(staffCell[0], staffCell[1]) : [10, 8];
+    staff.place(sx, 0, sz);
     staff.chaseSpeed = game.settings.difficulty === 'story' ? 2.4 : 3.25;
     for (const c of tableCells) staff.waypoints.push(new Vector3(c.x + 1.6, 0, c.z + 1.6));
     game.entities.push(staff);
@@ -467,6 +470,18 @@ const reality: RealityModule = {
         st.busy = false;
       }
     }
+    /** Like solo, but lets a line in progress finish first instead of dropping `fn`. */
+    async function soloWhenFree(fn: () => Promise<void>): Promise<void> {
+      try {
+        await game.clock.until(() => !st.busy, 30);
+      } catch (e) {
+        if (!(e instanceof Cancelled)) console.error(e);
+        return;
+      }
+      await solo(fn);
+    }
+    /** A remark that doesn't hold you in your chair (solo would, until it is said). */
+    const aside = (id: string) => void say(id).catch(() => undefined);
 
     // sit at the nearest free chair of the nearest table (interact anywhere near a table)
     const nearestTable = () => {
@@ -525,10 +540,15 @@ const reality: RealityModule = {
         const seat = new Vector3(c.x + (dx / len) * 0.75, 0, c.z + (dz / len) * 0.75);
         const yaw = Math.atan2(dx, dz);
         sitAt(seat, yaw, withDrink);
-        if (!game.flags.has('hall.sitHint')) {
-          game.flags.put('hall.sitHint');
-          void solo(() => say(withDrink ? 't_sit' : 't_noglass'));
-        } else if (!withDrink) void solo(() => say('t_noglass'));
+        // the first sit tells the chapter's rule: never dropped, only said once it can be heard
+        const hint = withDrink ? 't_sit' : 't_noglass';
+        if (!game.flags.has('hall.sitHint'))
+          void soloWhenFree(async () => {
+            if (game.flags.has('hall.sitHint')) return;
+            game.flags.put('hall.sitHint');
+            await say(hint);
+          });
+        else if (!withDrink) aside('t_noglass');
       },
     });
     for (const [i, g] of glassesAt.entries()) {
@@ -545,10 +565,12 @@ const reality: RealityModule = {
           hideInstancesNear(staleGlasses, g.x, g.z, 0.1);
           tableOf(g).glass = false;
           game.inventory.add('staleBeer', 1);
-          if (!game.flags.has('hall.glassHint')) {
-            game.flags.put('hall.glassHint');
-            void solo(() => say('t_glass'));
-          }
+          if (!game.flags.has('hall.glassHint'))
+            void soloWhenFree(async () => {
+              if (game.flags.has('hall.glassHint')) return;
+              game.flags.put('hall.glassHint');
+              await say('t_glass');
+            });
         },
       });
     }
@@ -578,8 +600,11 @@ const reality: RealityModule = {
             await say('t_sklad_closed');
             return;
           }
-          await say('t_sklad');
+          // out you go: the door stays, the controls rest and she no longer comes for you
           st.skladOpen = true;
+          staff.active = false;
+          game.input.setEnabled(false);
+          await say('t_sklad');
           await game.gotoReality('r4');
         }),
     });
@@ -593,7 +618,9 @@ const reality: RealityModule = {
           game.giveLight(1);
           await say('t_lighter');
           game.ui.toast(
-            game.touch ? 'Svetlo zapneš tlačidlom „Svetlo"' : 'Zapaľovač zapneš klávesom F',
+            game.touch
+              ? 'Svetlo zapneš tlačidlom „Svetlo"'
+              : `Zapaľovač zapneš klávesom ${game.keyLabel('light')}`,
             4000,
           );
           await say('e_h4', ezo);
@@ -608,18 +635,15 @@ const reality: RealityModule = {
 
     game.onSignal = (_id, name) => {
       if (name === 'notice') {
-        void game.say(
-          O,
-          game.rng.chance(0.5) ? L3.o_notice!.text : L3.o_notice2!.text,
-          voiceUrl(game.rng.chance(0.5) ? 'o_notice' : 'o_notice2'),
-        );
+        const which = game.rng.chance(0.5) ? 'o_notice' : 'o_notice2';
+        void game.say(O, L3[which]!.text, voiceUrl(which)).catch(() => undefined);
         game.synth.stinger(0.35);
         game.status.fear.scare(0.25);
       } else if (name === 'serve') {
         void (async () => {
           await game.say(O, L3.o_serve!.text, voiceUrl('o_serve'));
           game.consumeNow('pivo');
-        })();
+        })().catch(() => undefined);
       }
     };
 

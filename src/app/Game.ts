@@ -15,7 +15,7 @@ import { Scope } from '../core/scope.ts';
 import { clamp, damp } from '../core/damp.ts';
 import { comfort } from '../render/comfort.ts';
 import { MusicBox, TUNES } from '../audio/procedural/musicbox.ts';
-import { DEFAULT_BINDS, InputManager } from '../input/InputManager.ts';
+import { DEFAULT_BINDS, InputManager, type Bindable } from '../input/InputManager.ts';
 import type { InputSnapshot } from '../input/actions.ts';
 import { TouchControls } from '../input/touch/TouchControls.ts';
 import { UI, keyName } from '../ui/UI.ts';
@@ -597,17 +597,25 @@ export class Game {
 
   /** Called by realities to move on. */
   async gotoReality(id: string, checkpoint?: string): Promise<void> {
-    this.input.setEnabled(false);
-    await this.tweenFx('fade', 1, 1.2);
-    if (!realityExists(id)) {
-      // The next reality isn't built yet: end the preview instead of falling back to the pub.
-      this.disposeReality();
-      await this.ui.showEndingText([t('toBeContinued'), t('thanksForPlaying')], 3500);
-      await this.titleScreen();
-      return;
+    this.leaving = true;
+    try {
+      this.input.setEnabled(false);
+      await this.tweenFx('fade', 1, 1.2);
+      if (!realityExists(id)) {
+        // The next reality isn't built yet: end the preview instead of falling back to the pub.
+        this.disposeReality();
+        await this.ui.showEndingText([t('toBeContinued'), t('thanksForPlaying')], 3500);
+        await this.titleScreen();
+        return;
+      }
+      await this.startReality(id, checkpoint, false);
+    } finally {
+      this.leaving = false;
     }
-    await this.startReality(id, checkpoint, false);
   }
+
+  /** On the way to the next chapter (gotoReality): no blackout can interrupt it. */
+  private leaving = false;
 
   private disposeReality(): void {
     this.clock.cancelAll();
@@ -700,7 +708,8 @@ export class Game {
 
   /** Blackout: fade, show „okno", reload the last checkpoint. */
   async okno(reason: string): Promise<void> {
-    if (this.mode !== 'play' || this.debug.god) return;
+    // not while leaving for the next chapter (its fade would be cut short and the okno hang)
+    if (this.mode !== 'play' || this.debug.god || this.leaving) return;
     this.mode = 'okno';
     console.info('okno:', reason);
     this.input.setEnabled(false);
@@ -723,7 +732,16 @@ export class Game {
     }
     await this.tweenFx('fade', 1, 0.6);
     this.disposeReality();
-    await this.ui.showOkno(3.2, t(by ? 'oknoCaught' : 'oknoSub'));
+    // what put you out: the drink, the cold, the water, or something that got you
+    const why =
+      reason === 'alcohol'
+        ? 'oknoSub'
+        : reason === 'cold'
+          ? 'oknoCold'
+          : reason === 'voda'
+            ? 'oknoWater'
+            : 'oknoCaught';
+    await this.ui.showOkno(3.2, t(why));
     const save = loadSave();
     if (save) this.restoreSave(save);
     this.status.reset(Math.min(1, this.status.intox.bac));
@@ -892,6 +910,14 @@ export class Game {
       swayAngle: sway,
       canSprint: !st.fear.panicking || st.fear.value < 0.95,
     });
+    // fell out of the world through a gap: back where the chapter last saved you
+    if (this.mode === 'play' && this.player.pos.y < -20 && !this.player.noclip) {
+      const cp = this.reality?.checkpoints[this.checkpoint];
+      if (cp) {
+        this.player.teleport(cp.pos, cp.yaw);
+        this.rig.setOrientation(cp.yaw, cp.pitch ?? 0);
+      }
+    }
     if (this.builder) {
       _eye.copy(this.player.pos).setY(this.player.pos.y + 0.05);
       const surf = this.builder.surfaceAt(_eye);
@@ -912,6 +938,8 @@ export class Game {
     if (st.fear.panicking && this.rng.chance(dt * 0.8)) {
       const p = this.player.pos;
       this.addNoise({ x: p.x, y: p.y + 1.5, z: p.z, loudness: 0.5, kind: 'panic' });
+      // you hear yourself gasp: whatever listens hears it too
+      this.synth.hiss(undefined, 0.3, 0.05);
     }
 
     this.stepProjectiles(dt);
@@ -1015,7 +1043,12 @@ export class Game {
 
   private lighterOutHint(): string {
     if (this.touch) return t('lighterOut');
-    return `${t('lighterOut')} (${keyName(this.settings.keys.light ?? DEFAULT_BINDS.light)})`;
+    return `${t('lighterOut')} (${this.keyLabel('light')})`;
+  }
+
+  /** The key an action is bound to, as the player knows it (for hints: „klávesom Q"). */
+  keyLabel(action: Bindable): string {
+    return keyName(this.settings.keys[action] ?? DEFAULT_BINDS[action]);
   }
 
   /** Water depth at the player's feet (0 on dry ground), from the reality. */
@@ -1114,6 +1147,9 @@ export class Game {
 
   /** Drinks immediately (scripted rounds at the table). */
   consumeNow(item: ItemId): void {
+    // a drink of your own on its way down goes back into your pocket (it used to be lost)
+    if (this.drinkItem && this.drinkTimer > 0) this.inventory.add(this.drinkItem);
+    this.handheld.hide();
     this.finishDrink(item);
   }
 

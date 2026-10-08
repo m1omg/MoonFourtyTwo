@@ -109,6 +109,7 @@ const reality: RealityModule = {
       else if (name === 'ask') line('r_ask');
       else if (name === 'thanks') {
         put('passed');
+        game.saveCheckpoint(game.checkpoint);
         line('r_thanks');
       }
     };
@@ -199,7 +200,11 @@ const reality: RealityModule = {
             if (st.stopAsked && st.flick === 'none') {
               st.phase = 'brake';
               st.phaseT = 0;
-            } else if (t >= 40 && Math.floor((t - 40) / 30) > Math.floor((before - 40) / 30)) {
+            } else if (
+              !st.stopAsked &&
+              t >= 40 &&
+              Math.floor((t - 40) / 30) > Math.floor((before - 40) / 30)
+            ) {
               // he keeps reminding you (at 40 s, then every 30 s): the bus never stops on its own
               line('e9_1');
             }
@@ -231,6 +236,8 @@ const reality: RealityModule = {
             st.stopDist = st.dist;
             openDoors(true);
             if (st.seg === 4) {
+              doorTarget.fill(0);
+              doorTarget[1] = 1;
               bus.doors[1]!.body.enabled = false;
               st.flick = 'after';
               st.flickT = 0;
@@ -242,12 +249,20 @@ const reality: RealityModule = {
           break;
         }
         case 'stopped': {
-          if (st.seg === 2 && crossed(2) && insp.state === 'wait' && !F('passed')) {
+          // she gets on once you're out of her way (she used to appear right where you stood)
+          const entry = bus.route[0];
+          const inHerWay =
+            !!entry && Math.hypot(game.player.pos.x - entry.x, game.player.pos.z - entry.z) < 1.6;
+          if (st.seg === 2 && t >= 2 && !inHerWay && insp.state === 'wait' && !F('passed')) {
             insp.board();
             line('r_board');
             if (!F('valid'))
               after(3.5, () => {
-                if (F('ticket')) return;
+                if (F('valid')) return;
+                if (F('ticket')) {
+                  hint('t_ticket_unvalidated');
+                  return;
+                }
                 hint('t_no_ticket');
                 if (!F('cap')) after(4, () => hint('t_cap_hint'));
               });
@@ -272,6 +287,7 @@ const reality: RealityModule = {
       prompt: 'Baranica',
       onUse: () => {
         put('cap');
+        game.saveCheckpoint(game.checkpoint);
         line('t_cap');
       },
     });
@@ -285,6 +301,7 @@ const reality: RealityModule = {
       onUse: () => {
         bus.ticket.visible = false;
         put('ticket');
+        game.saveCheckpoint(game.checkpoint);
         game.synth.click(S.ticket, 2400, 0.08);
         line('t_ticket');
         if (!F('valid')) game.ui.toast('Lístok treba označiť v označovači pri dverách', 4000);
@@ -309,6 +326,7 @@ const reality: RealityModule = {
           else if (F('valid')) line('t_validated');
           else {
             put('valid');
+            game.saveCheckpoint(game.checkpoint);
             game.synth.clank(p, 0.5);
             game.synth.click(p, 1600, 0.12);
             line('t_validate');
@@ -327,7 +345,7 @@ const reality: RealityModule = {
           if (st.seg === 4 && st.phase === 'drive') {
             if (!st.stopAsked) line('t_stop');
             st.stopAsked = true;
-          } else if (st.phase !== 'end') hint('t_stop_early');
+          } else if (st.phase !== 'end' && !st.stopAsked) hint('t_stop_early');
         },
       }),
     );
@@ -355,6 +373,9 @@ const reality: RealityModule = {
       start(cp) {
         placeBeerMat(game, scope, 'r9', new Vector3(-0.3, 1.2, 5.2));
         startSegment(cp === 'revizor' ? 2 : cp === 'konecna' ? 4 : 0);
+        // back after a blackout with the ticket still unmarked: say so again (it's not on screen)
+        if (F('ticket') && !F('valid'))
+          after(2.5, () => game.ui.toast('Lístok máš, ale je neoznačený. Označovač je pri dverách.', 4500));
         // a restart past the inspector: he has already been
         if (cp === 'konecna') insp.setState('gone');
         st.speed = SPEED;
@@ -386,7 +407,7 @@ const reality: RealityModule = {
         const p = game.player.pos;
         if (st.phase === 'stopped' && p.x > 0.75 && DOORS.some((d) => p.z > d.z0 - 0.3 && p.z < d.z1 + 0.3))
           hint('t_door');
-        if (st.phase === 'end' && !st.left && p.x > B.x1 + 0.5 && Math.abs(p.z) < 0.8) {
+        if (st.phase === 'end' && !st.left && p.x > B.x1 + 0.3) {
           st.left = true;
           void game.gotoReality('r10');
         }

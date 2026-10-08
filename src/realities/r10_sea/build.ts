@@ -206,6 +206,12 @@ export async function buildSea(ctx: RealityCtx): Promise<Sea> {
   crate.rotation.y = 0.3;
   scene.add(crate);
   b.box([0.3, 0, -76.3], [0.9, 0.45, -75.7], null);
+  // and another one by the telescope, with the last shot on it
+  const crate2 = crate.clone();
+  crate2.position.set(2.55, 0, -103.95);
+  crate2.rotation.y = -0.4;
+  scene.add(crate2);
+  b.box([2.3, 0, -104.2], [2.8, 0.45, -103.7], null);
   // the coin telescope on the head
   const scope3 = new Group();
   const steel = scope.add(new MeshStandardMaterial({ color: 0x3a4a58, metalness: 0.6, roughness: 0.45 }));
@@ -226,11 +232,14 @@ export async function buildSea(ctx: RealityCtx): Promise<Sea> {
   scope3.position.set(2.2, 0, -104.5);
   scene.add(scope3);
   b.box([2.0, 0, -104.7], [2.4, 1.1, -104.3], null);
+  // the pier ends just behind where you arrive (the bus beyond is only scenery): a rail of air
+  b.box([PIER.x0 - 1, 0, PIER.z1 - 0.1], [PIER.x1 + 1, 2, PIER.z1 + 0.2], null);
   // three shots of Čierne: on the bench, on the crate, by the telescope
   const shots = [
     new Vector3(-1.75, 0.48, -50.4),
     new Vector3(0.6, 0.45, -76),
-    new Vector3(2.45, 1.06, -104.1),
+    // on a crate by the telescope (it used to float beside it in the air)
+    new Vector3(2.55, 0.48, -103.95),
   ].map((p) => {
     const g = new Group();
     const glass = new Mesh(

@@ -35,6 +35,8 @@ export const sk = {
   okno: 'okno',
   oknoSub: 'Niečo ti chýba. Kus večera.',
   oknoCaught: 'Niečo ťa dostalo.',
+  oknoCold: 'Zima ťa zložila.',
+  oknoWater: 'Voda sa nad tebou zavrela.',
   pressToStart: 'Klikni alebo ťukni pre pokračovanie',
   clickToLook: 'Klikni do hry, aby si sa mohol rozhliadať',
   warnTitle: 'Upozornenie',

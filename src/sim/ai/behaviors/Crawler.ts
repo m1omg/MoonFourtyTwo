@@ -42,6 +42,11 @@ export class Crawler extends Entity {
     return this.state === 'under';
   }
 
+  /** Lets go and slides back into the water (wherever it is). */
+  sink(): void {
+    if (this.state !== 'under' && this.state !== 'sink') this.setState('sink');
+  }
+
   protected step(dt: number, ctx: AIContext): void {
     const p = ctx.player;
     const dx = p.pos.x - this.pos.x;
