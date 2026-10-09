@@ -101,6 +101,8 @@ const reality: RealityModule = {
       frozenLine: false,
       /** On the way out through the front door (nothing may stop or repeat that). */
       leaving: false,
+      /** Vierka is giving you the keys (nothing else is said, the two hold still). */
+      keyScene: false,
     };
     pub.ourMat.draw(s.tallies);
     if (s.keys && pub.vierkaKeys) pub.vierkaKeys.visible = false;
@@ -340,7 +342,9 @@ const reality: RealityModule = {
       id: 'frontDoor',
       pos: new Vector3(-4.2, 1.05, 4.5),
       radius: 0.45,
-      prompt: () => (pub.frontDoor.isOpen ? 'Zavrieť' : 'Otvoriť'),
+      // with the keys in your pocket it says so
+      prompt: () =>
+        pub.frontDoor.isOpen ? 'Zavrieť' : s.phase === 'r2' && s.keys ? 'Odomknúť kľúčmi' : 'Otvoriť',
       enabled: () => !s.leaving,
       onUse: () => void frontDoor(),
     });
@@ -409,7 +413,7 @@ const reality: RealityModule = {
      */
     async function soloWhenFree(fn: () => Promise<void>): Promise<void> {
       try {
-        while (s.busy) await game.clock.until(() => !s.busy);
+        while (s.busy || s.keyScene) await game.clock.until(() => !s.busy && !s.keyScene);
       } catch (e) {
         if (!(e instanceof Cancelled)) console.error(e);
         return;
@@ -419,14 +423,18 @@ const reality: RealityModule = {
     /**
      * You ask Vierka for the keys: she comes to for a moment, says a word and slides the key ring
      * from her apron across the counter, then stands still again. The keys are yours (and saved:
-     * a blackout later wakes you at the table with them) the moment you ask; the exchange plays
-     * out as soon as nobody else is talking.
+     * a blackout later wakes you at the table with them) the moment you ask, and the exchange
+     * plays at once: whatever Ežo was saying stops, and the two at the card table hold still
+     * until she has given them to you. (It used to wait for Ežo to finish; meanwhile they came for
+     * you, and after the blackout the keys were yours without a word about it.)
      */
     function vierkaGivesKeys(): void {
-      if (s.keys || !s.r2Talked) return;
+      if (s.keys || !s.r2Talked || s.leaving) return;
       s.keys = true;
       game.flags.put('pub.keys');
       game.saveCheckpoint(game.checkpoint);
+      s.keyScene = true;
+      for (const w of watchers) w.awake = false;
       let given = false;
       const gen = game.clock.gen;
       const handOver = () => {
@@ -435,28 +443,37 @@ const reality: RealityModule = {
         if (pub.vierkaKeys) pub.vierkaKeys.visible = false;
         game.ui.toast('Kľúče od krčmy');
       };
-      void soloWhenFree(async () => {
-        if (pub.vierka) pub.vierka.frozen = false;
-        await say('t_ask_keys');
-        s.keySlide = 0;
-        await say('v_keys');
-        s.keySlide = -1;
-        handOver();
-        game.synth.click(pub.vierkaSpot, 3200, 0.12);
-        await game.clock.wait(0.4);
-        if (pub.vierka) pub.vierka.frozen = true;
-        await say('t_keys');
-      }).finally(() => {
-        if (pub.vierka) pub.vierka.frozen = true;
-        s.keySlide = -1;
-        handOver();
-      });
+      void (async () => {
+        try {
+          if (pub.vierka) pub.vierka.frozen = false;
+          // (a new line ends the one being said)
+          await say('t_ask_keys');
+          s.keySlide = 0;
+          await say('v_keys');
+          s.keySlide = -1;
+          handOver();
+          game.synth.click(pub.vierkaSpot, 3200, 0.12);
+          await game.clock.wait(0.4);
+          if (pub.vierka) pub.vierka.frozen = true;
+          await say('t_keys');
+        } catch (e) {
+          if (!(e instanceof Cancelled)) console.error(e);
+        } finally {
+          if (pub.vierka) pub.vierka.frozen = true;
+          s.keySlide = -1;
+          handOver();
+          if (gen === game.clock.gen) {
+            s.keyScene = false;
+            void runScript(wakeWhenClear);
+          }
+        }
+      })();
     }
     const keysOnApron = pub.vierkaKeys?.position.clone() ?? new Vector3();
     /** On the counter in front of her, in her space (she faces +z; the counter's front edge). */
     const keysOnCounter = new Vector3(keysOnApron.x, 1.09, 1.0);
     async function solo(fn: () => Promise<void>): Promise<void> {
-      if (s.busy) return;
+      if (s.busy || s.keyScene) return;
       s.busy = true;
       try {
         await fn();
@@ -797,7 +814,9 @@ const reality: RealityModule = {
       await game.clock.until(
         () => s.leaving || watchers.every((w) => Math.hypot(w.pos.x - p.x, w.pos.z - p.z) >= 3),
       );
-      if (s.phase === 'r2' && s.r2Talked && !s.leaving) for (const w of watchers) w.awake = true;
+      // (not while Vierka gives you the keys: that scene wakes them when it ends)
+      if (s.phase === 'r2' && s.r2Talked && !s.leaving && !s.keyScene)
+        for (const w of watchers) w.awake = true;
     }
 
     async function r2Talk(): Promise<void> {
@@ -873,11 +892,18 @@ const reality: RealityModule = {
           } else pub.wcDoor.close();
           if (s.r2Talked) {
             wakeWatchersLater(3);
-            // back after they got you: Ežo says it again
+            // the keys are already yours: say so (nothing told you after a blackout)
+            if (s.keys) game.ui.toast('Kľúče od krčmy máš pri sebe.', 4500);
+            // back after they got you: Ežo says it again (but stops if you go and ask Vierka)
             if (watchers.some((w) => w.id === game.lastOkno))
               void soloWhenFree(async () => {
                 await game.clock.wait(1.2);
+                if (s.keys) {
+                  await say('e_r2_6');
+                  return;
+                }
                 await say('e_r2_3');
+                if (s.keyScene || s.keys) return;
                 await say('e_r2_5');
               });
           }

@@ -152,6 +152,13 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
     `set` bumps `NavGrid.version`, which makes every entity re-plan its path.
   - Keys only after `r2Talked` (you could skip the rule and the juniper hint). The key toast
     shows when she hands them over, not before you ask.
+  - **Keys after a catch (owner's report, 2026-10-09).** After an OKNO Ežo's two-line reminder
+    held `busy` ~11 s; asking Vierka then saved `pub.keys` and hid the prompt, but the exchange
+    queued behind him, so the regulars got you meanwhile and you woke with keys you were never
+    told about. Now the exchange plays at once (`s.keyScene`: it supersedes his line, his
+    reminder stops, `solo`/`soloWhenFree` wait for it, the watchers sleep until it ends and then
+    `wakeWhenClear`). With keys, the post-OKNO toast says so, Ežo says `e_r2_6`, and the door
+    prompt reads "Odomknúť kľúčmi". Test: the third case in `frozen-pub.spec.ts`.
   - `soloWhenFree` is a real queue (several waiters, no 15 s drop); `t_frozen`, `t_door_open`,
     `t_knock` and `t_stall` go through it (`pub.frozenSeen` is set after the line played).
   - Exit: `s.leaving` disables the door prompt and stops wakes and flicker.

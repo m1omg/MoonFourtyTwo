@@ -168,3 +168,69 @@ test('you ask Vierka for the keys at the bar, and a blackout later does not take
   expect((await a.info()).flags['pub.keys'] ?? 0).toBe(1);
   expect(errors, errors.join('\n')).toHaveLength(0);
 });
+
+test('caught, then straight to Vierka while Ežo repeats himself: she gives you the keys at once', async ({
+  page,
+}, info) => {
+  test.skip(info.project.name !== 'desktop');
+  test.setTimeout(400_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('./#r1:frozen&test&saves&q=low&seed=5');
+  await page.waitForFunction(() => (window as unknown as { __mf42: Api }).__mf42?.ready === true, null, {
+    timeout: 180_000,
+  });
+  const a = mf(page);
+  const subtitle = () => page.evaluate(() => document.querySelector('.subtitles')?.textContent ?? '');
+  const toast = () => page.evaluate(() => document.querySelector('.toast')?.textContent ?? '');
+  const doorPrompt = () =>
+    page.evaluate(() => {
+      const g = (window as unknown as { __game: { interactions: { get(id: string): { prompt: unknown } } } })
+        .__game;
+      const p = g.interactions.get('frontDoor')!.prompt;
+      return typeof p === 'function' ? (p as () => string)() : p;
+    });
+  const caught = async () => {
+    // in the middle of the room, looking at the wall: they come for you
+    await a.teleport(0.5, 1.0, 0);
+    await a.aim(0.5, 1.5, -4.4);
+    expect(await until(page, async () => (await a.mode()) !== 'play', 40, 0.25)).toBe(true);
+    for (let i = 0; i < 8; i++) await a.sim(0.25);
+    await page.waitForFunction(() => (window as unknown as { __mf42: Api }).__mf42.mode === 'play', null, {
+      timeout: 120_000,
+    });
+  };
+  await a.sim(0.5);
+  await a.teleport(3.0, 2.0, Math.PI);
+  expect(await until(page, async () => (await subtitle()).includes('Sadni si'), 20, 0.25)).toBe(true);
+  expect(await a.use('seat2')).toBe(true);
+  expect(await until(page, async () => ((await a.info()).flags['pub.r2talk'] ?? 0) === 1, 60)).toBe(true);
+  await page.evaluate(() => {
+    const m = (window as unknown as { __mf42: Api & { move(x: number, y: number): void } }).__mf42;
+    m.move(0, -1);
+    m.sim(0.3);
+    m.move(0, 0);
+    m.sim(0.2);
+  });
+  await caught();
+
+  // Ežo starts telling you again; you go to the bar at once, with your back to the two
+  expect(await until(page, async () => (await subtitle()).includes('Na tých dvoch'), 6, 0.25)).toBe(true);
+  expect((await a.info()).flags['pub.keys'] ?? 0).toBe(0);
+  await a.teleport(-1.4, -2.0, 0);
+  await a.aim(-1.4, 1.5, -3.7);
+  // she gives them to you now, not after him (and nothing gets you meanwhile)
+  expect(await until(page, async () => (await subtitle()).includes('kľúče od dverí'), 1.5, 0.1)).toBe(true);
+  expect((await a.info()).flags['pub.keys'] ?? 0).toBe(1);
+  expect(await until(page, async () => (await subtitle()).includes('A už choď'), 10, 0.25)).toBe(true);
+  expect(await until(page, async () => (await toast()).includes('Kľúče od krčmy'), 6, 0.25)).toBe(true);
+  expect(await a.mode()).toBe('play');
+  expect(await doorPrompt()).toBe('Odomknúť kľúčmi');
+
+  // caught again later: you wake with the keys, and are told so
+  await caught();
+  expect((await a.info()).flags['pub.keys'] ?? 0).toBe(1);
+  expect(await toast()).toContain('Kľúče od krčmy máš');
+  expect(await doorPrompt()).toBe('Odomknúť kľúčmi');
+  expect(errors, errors.join('\n')).toHaveLength(0);
+});
