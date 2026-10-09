@@ -56,6 +56,21 @@ function keyActions(b: KeyBinds): Record<string, Action> {
   return a;
 }
 
+/**
+ * The extra mouse buttons as bindable "keys": the middle one and the two on the side (the left and
+ * right buttons always use and drink). Stored in the settings like key codes.
+ */
+const MOUSE_CODES: Record<number, string> = { 1: 'MouseMiddle', 3: 'MouseBack', 4: 'MouseForward' };
+
+/** The bindable code of a mouse button, or null for the left and right buttons. */
+export function mouseCode(button: number): string | null {
+  if (button === 0 || button === 2) return null;
+  return MOUSE_CODES[button] ?? `Mouse${button + 1}`;
+}
+
+/** Buttons the browser would answer itself: back (3) and forward (4) leave the game. */
+const isSideButton = (button: number) => button === 3 || button === 4;
+
 const MAX_MOUSE_DELTA = 300; // px; some Chrome builds report huge spikes on pointer-lock changes
 
 export interface LookSettings {
@@ -124,11 +139,33 @@ export class InputManager {
     document.addEventListener('pointerlockchange', this.onLockChange);
     target.addEventListener('wheel', this.onWheel, { passive: true });
     target.addEventListener('mousedown', this.onMouseDown);
+    window.addEventListener('mouseup', this.onMouseUp, { capture: true });
+    window.addEventListener('mousedown', this.onAnyMouseDown, { capture: true });
+    window.addEventListener('auxclick', this.onAuxClick, { capture: true });
     // the right button drinks: no browser menu over the game
     target.addEventListener('contextmenu', this.onContextMenu);
   }
 
   private onContextMenu = (e: Event): void => e.preventDefault();
+
+  /**
+   * The side buttons take the browser back or forward (out of the game, on release) wherever they
+   * are pressed: never while the game is open. The middle button only over the game itself (no
+   * autoscroll there); on a link it still opens a tab.
+   */
+  private onAnyMouseDown = (e: MouseEvent): void => {
+    if (isSideButton(e.button) || (e.button === 1 && e.target === this.target)) e.preventDefault();
+  };
+
+  private onAuxClick = (e: MouseEvent): void => {
+    if (isSideButton(e.button) || (e.button === 1 && e.target === this.target)) e.preventDefault();
+  };
+
+  private onMouseUp = (e: MouseEvent): void => {
+    if (isSideButton(e.button)) e.preventDefault();
+    const code = mouseCode(e.button);
+    if (code) this.keys.delete(code);
+  };
 
   detach(): void {
     window.removeEventListener('keydown', this.onKeyDown);
@@ -139,6 +176,9 @@ export class InputManager {
     document.removeEventListener('pointerlockchange', this.onLockChange);
     this.target?.removeEventListener('wheel', this.onWheel);
     this.target?.removeEventListener('mousedown', this.onMouseDown);
+    window.removeEventListener('mouseup', this.onMouseUp, { capture: true });
+    window.removeEventListener('mousedown', this.onAnyMouseDown, { capture: true });
+    window.removeEventListener('auxclick', this.onAuxClick, { capture: true });
     this.target?.removeEventListener('contextmenu', this.onContextMenu);
   }
 
@@ -350,13 +390,24 @@ export class InputManager {
   };
 
   private onMouseDown = (e: MouseEvent): void => {
-    if (!this.enabled) return;
+    const code = mouseCode(e.button);
+    const a = code ? this.keyActions[code] : undefined;
+    if (!this.enabled) {
+      // like the keyboard: only pause and skip get through a menu or a cutscene
+      if (a === 'pause' || a === 'skip') this.latched.add(a);
+      return;
+    }
     if (!this.pointerLocked) {
       void this.requestPointerLock();
       return;
     }
     if (e.button === 0) this.latched.add('interact');
-    if (e.button === 2) this.latched.add('drink');
+    else if (e.button === 2) this.latched.add('drink');
+    else if (code) {
+      // held like a key (sprint, crouch, walking), pressed like a key (everything else)
+      this.keys.add(code);
+      if (a) this.latched.add(a);
+    }
   };
 
   private onWheel = (e: WheelEvent): void => {

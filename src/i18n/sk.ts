@@ -55,8 +55,8 @@ export const sk = {
   setShowFps: 'Zobraziť FPS',
   setKeys: 'Ovládanie (klávesy)',
   setKeysHint:
-    'Klikni na kláves a stlač nový. Esc zruší. Šípky, Esc, Tab, 1 – 6, medzerník a Enter platia vždy.',
-  setKeysPress: 'stlač kláves…',
+    'Klikni na kláves a stlač nový kláves alebo stredné či bočné tlačidlo myši. Esc zruší. Šípky, Esc, Tab, 1 – 6, medzerník a Enter platia vždy.',
+  setKeysPress: 'stlač kláves alebo tlačidlo myši…',
   setKeysReset: 'Predvolené klávesy',
   keyForward: 'Dopredu',
   keyBack: 'Dozadu',
@@ -123,7 +123,7 @@ export const sk = {
   aboutBody:
     'Ešte jedno je fikcia. Postavy, miesta a udalosti sú vymyslené.\nHru vytvoril Claude (Anthropic) pre m1omg.\nModely a textúry: Poly Haven a ambientCG (CC0). Postavy: generované pomocou AI (Higgsfield, Krea). Ežov hlas: ElevenLabs. Hudba a zvuky vznikajú priamo v prehliadači.',
   aboutControls:
-    'Ovládanie\nWASD alebo šípky: chôdza · Shift: beh · C: skrčiť sa\nmyš: rozhliadanie · E alebo ľavé tlačidlo: použiť, hovoriť\nQ alebo pravé tlačidlo: vypiť · 1 – 6 alebo koliesko: vybrať\nF: zapaľovač, baterka · G: hodiť · Esc: pauza\n(Klávesy zmeníš v Nastaveniach.)\nNa mobile a tablete: joystick vľavo dole chodí (chytíš ho aj kdekoľvek na ľavej polovici), ťahaním po pravej polovici sa rozhliadaš. V Nastaveniach (Dotykové ovládanie) sa to dá prehodiť: ťahaním po pravej polovici chodíš a joystick otáča kameru.',
+    'Ovládanie\nWASD alebo šípky: chôdza · Shift: beh · C: skrčiť sa\nmyš: rozhliadanie · E alebo ľavé tlačidlo: použiť, hovoriť\nQ alebo pravé tlačidlo: vypiť · 1 – 6 alebo koliesko: vybrať\nF: zapaľovač, baterka · G: hodiť · Esc: pauza\n(Klávesy zmeníš v Nastaveniach; ovládanie dostanú aj stredné a bočné tlačidlá myši.)\nNa mobile a tablete: joystick vľavo dole chodí (chytíš ho aj kdekoľvek na ľavej polovici), ťahaním po pravej polovici sa rozhliadaš. V Nastaveniach (Dotykové ovládanie) sa to dá prehodiť: ťahaním po pravej polovici chodíš a joystick otáča kameru.',
   continueNoSave: 'Nemáš uloženú hru.',
   updated: 'Hra bola aktualizovaná. Načítavam znova…',
   gpuReset: 'Grafika sa reštartovala. Pokračujem…',

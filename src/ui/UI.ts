@@ -2,7 +2,7 @@ import { el, wait } from './dom.ts';
 import { t, sk } from '../i18n/sk.ts';
 import type { Settings } from '../save/Settings.ts';
 import type { SaveBook, SaveData } from '../save/SaveGame.ts';
-import { BINDABLE, DEFAULT_BINDS, type Bindable } from '../input/InputManager.ts';
+import { BINDABLE, DEFAULT_BINDS, mouseCode, type Bindable } from '../input/InputManager.ts';
 import type { ItemId } from '../sim/items/items.data.ts';
 import { ITEMS } from '../sim/items/items.data.ts';
 
@@ -411,21 +411,34 @@ export class UI {
         b.addEventListener('click', () => {
           stopListening?.();
           b.textContent = t('setKeysPress');
+          const assign = (code: string) => {
+            const other = BINDABLE.find((o) => o !== a && binds[o] === code);
+            if (other) s.keys = { ...s.keys, [other]: binds[a] };
+            s.keys = { ...s.keys, [a]: code };
+            onChange(s);
+          };
           const onKey = (e: KeyboardEvent) => {
             if (!box.isConnected) return stopListening?.(); // the settings were closed
             e.preventDefault();
             e.stopImmediatePropagation();
-            if (e.code !== 'Escape') {
-              const other = BINDABLE.find((o) => o !== a && binds[o] === e.code);
-              if (other) s.keys = { ...s.keys, [other]: binds[a] };
-              s.keys = { ...s.keys, [a]: e.code };
-              onChange(s);
-            }
+            if (e.code !== 'Escape') assign(e.code);
+            draw();
+          };
+          // the middle and side mouse buttons can take a control too (left and right are fixed)
+          const onMouse = (e: MouseEvent) => {
+            if (!box.isConnected) return stopListening?.();
+            const code = mouseCode(e.button);
+            if (!code) return;
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            assign(code);
             draw();
           };
           window.addEventListener('keydown', onKey, { capture: true });
+          window.addEventListener('mousedown', onMouse, { capture: true });
           stopListening = () => {
             window.removeEventListener('keydown', onKey, { capture: true });
+            window.removeEventListener('mousedown', onMouse, { capture: true });
             stopListening = null;
           };
         });
@@ -683,6 +696,11 @@ function escapeHtml(s: string): string {
 /** A key code as the player knows it (KeyE → E, ShiftLeft → Shift ľavý). */
 export function keyName(code: string): string {
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  // mouse buttons as gamers count them: 3 the middle one, 4 and 5 the side ones
+  if (code === 'MouseMiddle') return 'Myš 3 (stredné)';
+  if (code === 'MouseBack') return 'Myš 4 (späť)';
+  if (code === 'MouseForward') return 'Myš 5 (vpred)';
+  if (/^Mouse\d+$/.test(code)) return `Myš ${Number(code.slice(5))}`;
   if (/^Digit\d$/.test(code)) return code.slice(5);
   if (/^Numpad/.test(code)) return `Num ${code.slice(6)}`;
   const side = code.endsWith('Left') ? ' ľavý' : code.endsWith('Right') ? ' pravý' : '';
