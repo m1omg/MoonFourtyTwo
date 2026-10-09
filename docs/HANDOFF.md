@@ -5,17 +5,21 @@ Spoiler-free. Written so the work can carry on in a new session or from another 
 ## State
 
 - **Live game:** https://m1omg.github.io/MoonFourtyTwo/. It is built from
-  `ccr-2a407a47-pkyyrs`. Its last code change is `dde06a0`, the keys fix in chapter 2.
-- **CI:** that commit passed the whole run: build, unit tests, deploy and all browser tests.
+  `ccr-2a407a47-pkyyrs`.
+- **Last code changes:**
+  - `dde06a0`: the keys fix in chapter 2.
+  - `f753147`: controls can be bound to the middle and side mouse buttons, and the side
+    buttons no longer take the browser out of the game. This one came from a parallel session.
+- **CI:** both commits passed the whole run: build, unit tests, deploy and all browser tests.
 - **Owner's last report:** after the two regulars caught you, Vierka wouldn't give you the keys.
   It is fixed, and the owner confirmed it works.
-- **In progress:** nothing. The working tree is clean, and no branch has unmerged work.
+- **In progress:** nothing from this session. Everything it did is merged into
+  `ccr-2a407a47-pkyyrs`. If another session is still open, check it before starting new work.
 - **Owner's progress:** chapters 1 and 2 (the pub and the frozen pub). Nothing later may be
   spoiled.
 - **Tests:**
-  - 99 unit tests in 22 files.
-  - 36 browser tests in 17 files. In the last full run 33 passed and 2 were skipped by design;
-    the newest one was added after that run and passes on CI.
+  - 103 unit tests in 23 files.
+  - 38 browser tests in 18 files. Two are skipped by design, and the rest pass on CI.
 
 ## What changed in October
 
@@ -23,8 +27,12 @@ All of it is in `docs/fixes-2026-10.md`, written for the owner without spoilers:
 
 - The bugs the owner reported, and their causes.
 - A full audit of the game, with fixes in every chapter.
-- New features: save slots, playing with the phone upright, an optional swipe-to-walk touch
-  scheme, a furnished pub toilet and an animation for every drink and food.
+- New features:
+  - save slots;
+  - playing with the phone held upright, and an optional swipe-to-walk touch scheme;
+  - a furnished pub toilet;
+  - an animation for every drink and food;
+  - mouse-button bindings.
 - Faster drawing with the same picture.
 
 ## Open items
