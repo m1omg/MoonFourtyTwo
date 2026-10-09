@@ -1,7 +1,8 @@
 # Notes for agents (contains spoilers)
 
 **Owner: don't read past this heading.** Everything below is folded away and spoils the whole
-game. The spoiler-free summary of these fixes is in `docs/fixes-2026-10.md`.
+game. The spoiler-free summary of these fixes is in `docs/fixes-2026-10.md`, and where the
+work stands is in `docs/HANDOFF.md`.
 
 **Agents and other tools: read the rules below before using this file.**
 
@@ -14,7 +15,7 @@ game. The spoiler-free summary of these fixes is in `docs/fixes-2026-10.md`.
 - Commit messages, PR text and owner-facing docs must be spoiler-free too. Spoilers live only
   here and in `docs/sealed-design.b64` (gzip + base64; decode it with
   `base64 -d docs/sealed-design.b64 | gunzip`).
-- As of 2026-10-05 the owner has seen the first pub (reality 1) and the first dark scene
+- As of 2026-10-09 the owner has seen the first pub (reality 1) and the first dark scene
   (reality 2, the frozen pub), and nothing later.
 
 <details>
@@ -46,6 +47,25 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
 | r12 | Svetlo                | none                                                                              | cinematic → walk into the pub → sit → credits                                   |
 
 ## What this pass changed and why (honest, with spoilers)
+
+**6–7 October (from the commit history; the later passes below build on these)**
+
+- `c81dc37`: Ežo's mug stands on the table and is lifted to his mouth only while he drinks.
+- `9d787e5`, `407b412`: two sessions fixed the same pub reports; the merge kept the other
+  session's waking at Ežo's table plus this one's save slots, drink animations and menu fix.
+- `b792478`: save slots. „Uložiť hru" copies the last checkpoint into one of three slots; the five
+  most recent checkpoints are kept automatically (`src/save/SaveGame.ts`); „Pokračovať" still
+  uses the main save. Pause → main menu used to leave the loop paused.
+- `4516246`: first-person animation per drink kind (shot, bottle, glass) and food (two bites).
+- `58ef122`: a catch turns you towards the catcher and shows „Niečo ťa dostalo." (not the
+  alcohol OKNO text). In r2 each catch slows the watchers a little, down to about the story pace
+  (`r01_pub/index.ts`, "each time they get you"), and a creak gives away unseen movement.
+- `c4b6632`, `2b353cb`: portrait play (controls above the hotbar, subtitles on top, FOV widened
+  to ≥ 60° across). `96b6add`: the optional swipe-to-walk touch scheme.
+- `e840dca`: r2 watchers at a third of their speed; a flicker moves them ~30 cm. After any
+  OKNO nothing moves until you step 1.5 m from where you woke (`Game.respawnHold`, all
+  chapters). Its "save waits near danger" part was undone on 10-08: saves are immediate.
+- `d2060f4`, `a9b831d`: Vierka hands over the keys herself; the WC is furnished (see below).
 
 **Engine-wide fixes from the October audit (2026-10-08)**
 
@@ -287,6 +307,22 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
 
 ## Known gaps and risks
 
+- **Commit messages that spoil.** The history was reworded spoiler-free once (force-push, with
+  the owner's OK). Since then, `a80784c` and `7ed0e6c` (2026-10-08) name later chapters and their
+  threats (the endless pub, the cellar, the night bus, the silent sea, the last round, the
+  square, the waitress, the torch). Rewording them needs a force-push of
+  `ccr-2a407a47-pkyyrs`. The safety classifier refused it without the owner's explicit
+  permission. The owner was told and hasn't decided.
+- **Small cosmetic issues found in the audit and left alone:**
+  - r1/r2: the key ring on Vierka's apron sits below the counter's sightline. It doesn't matter
+    for play, because she slides the keys over.
+  - r6: a little light bleeds in the vestibule.
+  - r7: the chambermaid grazes door frames when she turns through a doorway.
+  - r7: a remark about the grandfather clock doesn't match the static model.
+- **Performance offered, not requested:** a point-light cap on high; simplifying the heaviest
+  props (street lamps 30k triangles each, stools 14k, the cigarette pack 12k); merging small
+  static meshes. All of these change the picture or the assets, so they wait for the owner.
+
 - Not verified on real hardware: the grain on Mesa or other real GPUs, Vivaldi voice playback,
   and pointer lock in Vivaldi.
 - r5's WALK cells cross walls in many places. Harmless today because only the water-bound
@@ -308,7 +344,22 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
 - **Screenshots:** headless Chromium with `executablePath` left to `PLAYWRIGHT_BROWSERS_PATH`,
   `--use-angle=swiftshader`. Under SwiftShader, `step` renders frames slowly; use `sim` to
   advance.
-- **Regression tests:** `tests/e2e/frozen-pub.spec.ts` covers the blackout loop and the
-  mid-sentence sit.
+- **Regression tests:**
+  - `tests/e2e/frozen-pub.spec.ts`: the blackout loop, the mid-sentence sit, keys kept across an
+    OKNO, and keys right after a catch.
+  - `tests/e2e/walkways.spec.ts`: capsule flood fill: table → door in r1/r2, inside → square,
+    square → seat in r12.
+  - `tests/e2e/pub-flow.spec.ts`: the r1 path, including the WC peek case.
+  - Each chapter has a `*-flow.spec.ts`.
+  - `smoke.spec.ts` loads the realities named in `REALITIES` (CI passes all but r2).
+- **Test pitfalls:**
+  - `__mf42.sim(s)` runs in one macrotask, so `runScript` continuations only run between
+    `page.evaluate` calls. Sim in ≤ 0.5 s chunks whenever a line or scene has to progress.
+  - A seated player stands only on a move made after a neutral input tick (`seatMoveArmed`).
+  - Use `&saves` whenever a test reloads after an OKNO.
+  - Without a running preview server, Playwright starts `npm run preview` itself (port 4173,
+    `reuseExistingServer`).
+  - Long-lived background servers in cloud sessions get killed by the time limit; let
+    Playwright own the server.
 
 </details>

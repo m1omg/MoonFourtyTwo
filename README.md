@@ -2,10 +2,11 @@
 
 A first-person horror adventure for the browser (three.js). It starts as an ordinary evening of beer and shots with your friend Ežo in a small-town Slovak pub. Then the pub stops being what it seems.
 
-- **Play:** https://m1omg.github.io/MoonFourtyTwo/. Desktop uses keyboard and mouse (gamepad works too); phones and tablets get touch controls in landscape.
+- **Play:** https://m1omg.github.io/MoonFourtyTwo/. Desktop uses keyboard and mouse (gamepad works too). Phones and tablets get touch controls, held sideways or upright; Nastavenia offers a second scheme (swipe to walk, the stick turns the view).
 - **Language:** Slovak (UI, subtitles, voices).
 - **Content:** 18+ fiction with horror, sudden scares, flashing lights and drinking.
 - **Comfort:** the settings can tone down camera motion and the drunk view, make flickering lights burn steady („Obmedziť záblesky"), enlarge subtitles and switch to the gentler „Príbeh" difficulty.
+- **Saves:** checkpoints save automatically. „Uložiť hru" keeps one in three slots, and „Načítať hru" also lists the five most recent checkpoints.
 - **Collectibles:** twelve beer mats with Ežo's notes are hidden along the way; the pause menu counts them.
 
 ## Controls (desktop)
@@ -18,7 +19,7 @@ A first-person horror adventure for the browser (three.js). It starts as an ordi
 | Mouse         | look                    |
 | E / LMB       | use, talk               |
 | Q / RMB       | drink the selected item |
-| 1–6 / wheel   | pick a drink            |
+| 1–9 / wheel   | pick a drink            |
 | F             | lighter / flashlight    |
 | G             | throw                   |
 | Esc           | pause                   |
@@ -47,4 +48,5 @@ Every push to `main` or a `ccr-*` branch runs CI. CI then publishes `dist/` to t
 - CC0 models, textures and HDRIs from [Poly Haven](https://polyhaven.com) and [ambientCG](https://ambientcg.com).
 - Ežo's 3D model was generated with Higgsfield (Tripo image-to-3D + auto-rig). Other AI assets come from Higgsfield and Krea. Spending is tracked in `docs/asset-ledger.md`.
 - `docs/sealed-design.b64` holds the full story design. It is deliberately encoded (gzip+base64) so the owner isn't spoiled.
+- `docs/HANDOFF.md` says where the work stands and what is open; `docs/fixes-2026-10.md` lists the October fixes. Both are spoiler-free.
 - `docs/SPOILERS-agent-notes.md` is for agents working on the code: a map of every chapter, the fixes and known gaps. It contains spoilers (folded away under a warning), so the owner shouldn't read it.
