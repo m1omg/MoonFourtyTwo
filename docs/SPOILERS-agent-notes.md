@@ -291,6 +291,12 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
 - **Voices:** Opus copies plus MP3 fallback (`voiceUrl` returns a list; `AudioSystem.loadFirst`).
   Only `e_intro2` and `e_intro3` are recorded; all other lines are subtitles only.
 - **Skips:** a click in the first 0.4 s of a line doesn't skip it.
+- **Mouse buttons (2026-10-09):** the middle and side buttons can take any bindable control
+  (codes `MouseMiddle`, `MouseBack`, `MouseForward`, stored in `settings.keys` like key codes;
+  `mouseCode()` in `InputManager`). The side buttons' default is blocked page-wide on mousedown,
+  mouseup and auxclick: before this, the mouse's back button left the game (Chromium navigates
+  back on release). `tests/e2e/mouse-buttons.spec.ts` presses them through CDP. Firefox may not
+  pass the side buttons to pages at all.
 - **Grain** (`GradeEffect`): a pcg3d integer hash on `gl_FragCoord`, applied on a square-root
   scale. The sine hash on `uv * 1024` banded on some GPUs.
 
