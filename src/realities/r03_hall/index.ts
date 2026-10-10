@@ -380,7 +380,10 @@ const reality: RealityModule = {
     const staffCell = nav.nearestWalkable(...nav.toCell(10, 8), Area.WALK, 6);
     const [sx, sz] = staffCell ? nav.cellCenter(staffCell[0], staffCell[1]) : [10, 8];
     staff.place(sx, 0, sz);
-    staff.chaseSpeed = game.settings.difficulty === 'story' ? 2.4 : 3.25;
+    if (game.settings.difficulty === 'story') {
+      staff.chaseSpeed = 2.6;
+      staff.patrolSpeed = 1.3;
+    }
     for (const c of tableCells) staff.waypoints.push(new Vector3(c.x + 1.6, 0, c.z + 1.6));
     game.entities.push(staff);
     let staffVis: Character | null = null;

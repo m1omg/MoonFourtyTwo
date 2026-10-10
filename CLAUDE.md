@@ -26,7 +26,8 @@ Slovak UI and subtitles). Live at https://m1omg.github.io/MoonFourtyTwo/. Twelve
   the pub) instead of invalidating it. Check save/continue with the `&saves` flag.
 - **Talking to the owner:** they usually write in Slovak; answer in the language they write in.
   Refer to chapters by number ("chapter 3", "a later chapter"), never by title. As of
-  2026-10-09 they have played chapters 1 and 2 (the pub and the frozen pub) and nothing later.
+  2026-10-10 they have played the pub and the frozen pub (r1), the long pub (r3) and the level
+  with the hose (r4), and nothing later. They call r3 "level 2" and r4 "level 3".
   Update that line in `docs/SPOILERS-agent-notes.md` when they say they've moved on.
 - **No paid generation** (Higgsfield, Krea) unless the owner asks for it in that conversation.
   Krea is not used any more (it overran its budget); Higgsfield is not used for voices. Log any

@@ -10,8 +10,9 @@ import { canSeePlayer, distToPlayer } from '../perception.ts';
  */
 export class Staff extends Entity {
   readonly sight = { range: 15, halfAngle: 0.95, eyeHeight: 1.9 };
-  patrolSpeed = 1.25;
-  chaseSpeed = 3.25;
+  // a little quicker on her feet at the owner's request (October 2026); a sprint still outruns her
+  patrolSpeed = 1.45;
+  chaseSpeed = 3.55;
   /** Candidate patrol points (table aisles). */
   waypoints: Vector3[] = [];
   private target = new Vector3();

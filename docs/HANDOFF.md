@@ -15,8 +15,10 @@ Spoiler-free. Written so the work can carry on in a new session or from another 
   It is fixed, and the owner confirmed it works.
 - **In progress:** nothing from this session. Everything it did is merged into
   `ccr-2a407a47-pkyyrs`. If another session is still open, check it before starting new work.
-- **Owner's progress:** chapters 1 and 2 (the pub and the frozen pub). Nothing later may be
-  spoiled.
+- **Owner's progress (2026-10-10):** the pub and the frozen pub, the long pub (r3, their
+  "level 2") and the level with the hose (r4, their "level 3"). Nothing later may be spoiled.
+- **Last change (2026-10-10):** on the owner's request, the long pub's pursuer got a little
+  quicker and the hose level's creature a lot easier.
 - **Tests:**
   - 103 unit tests in 23 files.
   - 38 browser tests in 18 files. Two are skipped by design, and the rest pass on CI.

@@ -13,9 +13,22 @@ const _to = new Vector3();
  */
 export class Hisser extends Entity {
   vents: Vector3[] = [];
-  hearing = 13;
-  investigateSpeed = 1.9;
-  huntSpeed = 3.3;
+  // Tuned gentler at the owner's request (October 2026): it hears less far, hunts only footsteps
+  // close by, is slower than a brisk walk would need to be, waits longer before it sets off and
+  // loses interest sooner.
+  hearing = 9;
+  investigateSpeed = 1.35;
+  huntSpeed = 2.3;
+  /** Footsteps this close to it (and coming from the player) turn a search into a hunt. */
+  huntRange = 4.5;
+  /** Seconds it stays at the vent before it sets off: time to get away or keep still. */
+  emergeSeconds = 1.8;
+  /** Seconds without a sound before a hunt goes back to searching. */
+  huntPatience = 2.5;
+  /** Seconds without a sound before a search gives up and it goes back into the pipes. */
+  searchPatience = 6;
+  /** How close it has to get to catch you. */
+  reach = 0.75;
   /** Trail of head positions for the body (newest first), sampled by distance. */
   readonly trail: Vector3[] = [];
   private target = new Vector3();
@@ -78,7 +91,7 @@ export class Hisser extends Entity {
       }
       case 'emerge': {
         this.anim.alert = 0.6;
-        if (this.stateTime > 1.1) this.setState('investigate');
+        if (this.stateTime > this.emergeSeconds) this.setState('investigate');
         break;
       }
       case 'investigate': {
@@ -87,7 +100,7 @@ export class Hisser extends Entity {
           this.target.set(heard.x, heard.y, heard.z);
           this.quiet = 0;
           const fromPlayer = Math.hypot(heard.x - p.pos.x, heard.z - p.pos.z) < 1.5;
-          if (fromPlayer && Math.hypot(heard.x - this.pos.x, heard.z - this.pos.z) < 7) {
+          if (fromPlayer && Math.hypot(heard.x - this.pos.x, heard.z - this.pos.z) < this.huntRange) {
             this.setState('hunt');
             ctx.signal(this.id, 'hunt');
             break;
@@ -95,7 +108,7 @@ export class Hisser extends Entity {
         } else this.quiet += dt;
         const rem = this.moveTo(this.target, this.investigateSpeed, dt, ctx, 6);
         if (rem < 0.5 && this.quiet > 2.8) this.setState('retreat');
-        if (this.quiet > 9) this.setState('retreat');
+        if (this.quiet > this.searchPatience) this.setState('retreat');
         break;
       }
       case 'hunt': {
@@ -107,8 +120,8 @@ export class Hisser extends Entity {
         this.moveTo(this.target, this.huntSpeed, dt, ctx, 10);
         const dp = Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z);
         // within reach and nothing between: a wall's other side is not within reach
-        if (dp < 0.9 && !p.dead && !p.hidden && this.canReach(ctx)) ctx.catchPlayer(this.id);
-        if (this.quiet > 4) this.setState('investigate');
+        if (dp < this.reach && !p.dead && !p.hidden && this.canReach(ctx)) ctx.catchPlayer(this.id);
+        if (this.quiet > this.huntPatience) this.setState('investigate');
         break;
       }
       case 'stunned': {

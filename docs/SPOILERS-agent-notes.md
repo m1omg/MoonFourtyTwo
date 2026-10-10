@@ -15,8 +15,21 @@ work stands is in `docs/HANDOFF.md`.
 - Commit messages, PR text and owner-facing docs must be spoiler-free too. Spoilers live only
   here and in `docs/sealed-design.b64` (gzip + base64; decode it with
   `base64 -d docs/sealed-design.b64 | gunzip`).
-- As of 2026-10-09 the owner has seen the first pub (reality 1) and the first dark scene
-  (reality 2, the frozen pub), and nothing later.
+- As of 2026-10-10 the owner has played r1/r2 (the pub and the frozen pub), r3 and r4, and
+  nothing later. They count levels their own way: r3 is their "level 2" (the long pub) and r4
+  their "level 3" (the one with the hose).
+- **Difficulty tuning on the owner's request (2026-10-10):**
+  - r3 waitress: a little harder, patrol 1.25 → 1.45 m/s, chase 3.25 → 3.55 m/s (story 2.6 /
+    1.3). A sprint (4.3 m/s) still outruns her.
+  - r4 Hisser: a lot easier, all in `Hisser.ts` fields:
+    - hearing 13 → 9 m;
+    - hunt only for player footsteps within 4.5 m (was 7);
+    - investigate 1.9 → 1.35 m/s, hunt 3.3 → 2.3 m/s (story 1.7);
+    - waits 1.8 s at the vent (was 1.1);
+    - gives up a hunt after 2.5 s of silence (was 4) and a search after 6 s (was 9);
+    - catches within 0.75 m (was 0.9).
+
+  Tests: `tests/unit/hisser.test.ts`, `tests/unit/staff.test.ts`.
 
 <details>
 <summary>Spoilers: open only if you are an agent working on the code</summary>

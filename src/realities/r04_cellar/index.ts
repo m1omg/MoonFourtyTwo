@@ -616,7 +616,7 @@ const reality: RealityModule = {
       { at: [-3.4, -45.5], wall: [-3.83, -45.5], n: [1, 0] },
     ] as const;
     hisser.vents = vents.map((v) => new Vector3(v.at[0], F, v.at[1]));
-    hisser.huntSpeed = game.settings.difficulty === 'story' ? 2.4 : 3.3;
+    if (game.settings.difficulty === 'story') hisser.huntSpeed = 1.7;
     game.entities.push(hisser);
     const grilleMat = scope.add(
       new MeshStandardMaterial({

@@ -75,3 +75,64 @@ describe('Hisser', () => {
     expect(h.pos.x).toBeGreaterThan(-1);
   });
 });
+
+describe('Hisser tuning (gentler at the owner request)', () => {
+  /** An open corridor, no safe room: a player walking and making footsteps. */
+  function corridor() {
+    const s = setup();
+    s.nav.fillRect(-10, -1, 10, 1, Area.WALK, true);
+    return s;
+  }
+
+  it('footsteps a few metres off do not start a hunt, close ones do', () => {
+    const { ctx, noises, h, player } = corridor();
+    h.vents = [new Vector3(0, 0, 0)];
+    // surfaces at the noise, then hears steps from 6 m away: it searches, but does not hunt
+    player.pos.set(6, 0, 0);
+    noises.push({ x: 6, y: 0, z: 0, loudness: 1, kind: 'step' });
+    h.tick(1 / 60, ctx);
+    noises.length = 0;
+    for (let i = 0; i < 60 * 2.2; i++) h.tick(1 / 60, ctx);
+    h.place(0, 0, 0);
+    for (let i = 0; i < 30; i++) {
+      if (i % 15 === 0) noises.push({ x: 6, y: 0, z: 0, loudness: 1, kind: 'step' });
+      h.tick(1 / 60, ctx);
+      noises.length = 0;
+      h.place(0, 0, 0);
+    }
+    expect(h.state).toBe('investigate');
+    // the same steps 3 m away: a hunt
+    player.pos.set(3, 0, 0);
+    noises.push({ x: 3, y: 0, z: 0, loudness: 1, kind: 'step' });
+    h.tick(1 / 60, ctx);
+    expect(h.state).toBe('hunt');
+  });
+
+  it('waits at the vent before setting off, and gives up a hunt soon when you go quiet', () => {
+    const { ctx, noises, h, player } = corridor();
+    h.vents = [new Vector3(0, 0, 0)];
+    player.pos.set(2, 0, 0);
+    noises.push({ x: 2, y: 0, z: 0, loudness: 1, kind: 'step' });
+    h.tick(1 / 60, ctx);
+    noises.length = 0;
+    expect(h.state).toBe('emerge');
+    for (let i = 0; i < 60 * 1.5; i++) h.tick(1 / 60, ctx);
+    expect(h.state).toBe('emerge');
+    for (let i = 0; i < 60 * 0.5; i++) h.tick(1 / 60, ctx);
+    // a step close by: hunt; then silence (you stand still, out of reach): it stops hunting
+    player.pos.set(h.pos.x + 3, 0, 0);
+    noises.push({ x: player.pos.x, y: 0, z: 0, loudness: 1, kind: 'step' });
+    h.tick(1 / 60, ctx);
+    noises.length = 0;
+    expect(h.state).toBe('hunt');
+    player.pos.set(9.5, 0, 0);
+    for (let i = 0; i < 60 * 2.7; i++) h.tick(1 / 60, ctx);
+    expect(h.state).not.toBe('hunt');
+  });
+
+  it('is slower than a sprint and only a little faster than a walk when it hunts', () => {
+    const h = new Hisser('h');
+    expect(h.huntSpeed).toBeLessThan(2.6);
+    expect(h.huntSpeed).toBeLessThan(4.3 * 0.6);
+  });
+});
