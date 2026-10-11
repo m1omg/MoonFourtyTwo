@@ -1,4 +1,4 @@
-# Handoff: where things stand (9 October 2026)
+# Handoff: where things stand (11 October 2026)
 
 Spoiler-free. Written so the work can carry on in a new session or from another account.
 
@@ -6,22 +6,21 @@ Spoiler-free. Written so the work can carry on in a new session or from another 
 
 - **Live game:** https://m1omg.github.io/MoonFourtyTwo/. It is built from
   `ccr-2a407a47-pkyyrs`.
-- **Last code changes:**
-  - `dde06a0`: the keys fix in chapter 2.
-  - `f753147`: controls can be bound to the middle and side mouse buttons, and the side
-    buttons no longer take the browser out of the game. This one came from a parallel session.
-- **CI:** both commits passed the whole run: build, unit tests, deploy and all browser tests.
+- **Last code change (2026-10-10):** `acdf52d`. On the owner's request, the long pub's pursuer
+  got a little quicker and the hose level's creature a lot easier.
+- **CI:** that commit passed the whole run: build, unit tests, deploy and all browser tests.
+  The Pages deploy succeeded too, and a local build of the same commit gives the same files
+  as the published site.
 - **Owner's last report:** after the two regulars caught you, Vierka wouldn't give you the keys.
   It is fixed, and the owner confirmed it works.
-- **In progress:** nothing from this session. Everything it did is merged into
-  `ccr-2a407a47-pkyyrs`. If another session is still open, check it before starting new work.
+- **In progress:** nothing. Every session branch is merged into `ccr-2a407a47-pkyyrs`; there
+  are no open pull requests or issues.
 - **Owner's progress (2026-10-10):** the pub and the frozen pub, the long pub (r3, their
   "level 2") and the level with the hose (r4, their "level 3"). Nothing later may be spoiled.
-- **Last change (2026-10-10):** on the owner's request, the long pub's pursuer got a little
-  quicker and the hose level's creature a lot easier.
 - **Tests:**
-  - 103 unit tests in 23 files.
-  - 38 browser tests in 18 files. Two are skipped by design, and the rest pass on CI.
+  - 107 unit tests in 24 files.
+  - Browser tests in 18 files. CI runs them on a desktop and a mobile setup: 49 runs, of which
+    47 pass and 2 are skipped by design.
 
 ## What changed in October
 
@@ -56,6 +55,10 @@ None of these is blocking, and none is started.
 4. **Not checked on real hardware:**
    - the film grain on a real graphics card;
    - voices and mouse capture in Vivaldi on Linux.
+5. **CI warning, not failing yet.** GitHub is retiring Node 20 for actions; the `@v4`
+   actions in `.github/workflows/ci.yml` (`checkout`, `setup-node`, `upload-artifact`,
+   `download-artifact`) are being forced onto Node 24. Moving them to their newer major
+   versions would clear the warning.
 
 ## Continuing from another Claude account
 
