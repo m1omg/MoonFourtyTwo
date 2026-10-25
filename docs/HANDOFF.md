@@ -63,6 +63,9 @@ None of these is blocking, and none is started.
    actions in `.github/workflows/ci.yml` (`checkout`, `setup-node`, `upload-artifact`,
    `download-artifact`) are being forced onto Node 24. Moving them to their newer major
    versions would clear the warning.
+6. **Browser tests run on Ubuntu 24.04 (2026-10-25).** `ubuntu-latest` moved to 26.04, where
+   Playwright 1.56 won't install its browser, so the `e2e` job is pinned to `ubuntu-24.04`.
+   Upgrading Playwright would let it move back.
 
 ## Continuing from another Claude account
 
