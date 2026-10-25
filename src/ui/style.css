@@ -655,6 +655,10 @@ body {
   right: calc(var(--tb-right) + 176px);
   bottom: calc(var(--tb-lift) + 120px);
 }
+.touch .tb-jump {
+  right: calc(var(--tb-right) + 10px);
+  bottom: calc(var(--tb-lift) + 36px);
+}
 .touch .tb-pause {
   right: var(--tb-right);
   top: max(14px, env(safe-area-inset-top));

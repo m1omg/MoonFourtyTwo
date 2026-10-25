@@ -16,6 +16,7 @@ A first-person horror adventure for the browser (three.js). It starts as an ordi
 | WASD / arrows | move                    |
 | Shift         | sprint                  |
 | Ctrl / C      | crouch                  |
+| Space         | jump                    |
 | Mouse         | look                    |
 | E / LMB       | use, talk               |
 | Q / RMB       | drink the selected item |
@@ -24,7 +25,7 @@ A first-person horror adventure for the browser (three.js). It starts as an ordi
 | G             | throw                   |
 | Esc           | pause                   |
 
-Every control except looking, the left and right mouse buttons and the fixed keys (arrows, Esc, Tab, numbers, Space, Enter) can be moved in Nastavenia → Ovládanie, also to the middle mouse button or the two side buttons (Myš 3, 4, 5). The side buttons never take the browser back or forward while the game is open. Chromium browsers (Chrome, Vivaldi, Edge) pass the side buttons to the page; Firefox may keep them for itself.
+Enter skips a line; so does the jump key wherever you can't jump (in a scene, seated, wading deep). On a gamepad the right-stick click jumps; on a touch screen the „Skok" button. Every control except looking, the left and right mouse buttons and the fixed keys (arrows, Esc, Tab, numbers, Enter) can be moved in Nastavenia → Ovládanie, also to the middle mouse button or the two side buttons (Myš 3, 4, 5). The side buttons never take the browser back or forward while the game is open. Chromium browsers (Chrome, Vivaldi, Edge) pass the side buttons to the page; Firefox may keep them for itself.
 
 ## Development
 

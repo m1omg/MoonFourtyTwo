@@ -16,6 +16,7 @@ export type Action =
   | 'slot9'
   | 'pause'
   | 'journal'
+  | 'jump'
   | 'skip';
 
 /** Per-tick input snapshot consumed by the simulation. */

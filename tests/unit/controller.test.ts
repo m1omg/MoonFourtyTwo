@@ -66,6 +66,78 @@ describe('PlayerController', () => {
     expect(p.pos.y).toBeGreaterThan(0.08);
   });
 
+  /**
+   * A basin sunk into the floor, built like the pools in the game: its floor `depth` below the
+   * deck, 0.2 m walls round it whose tops stop 4 mm under the deck, the deck on top.
+   */
+  function basin(depth: number): CollisionWorld {
+    const d = -depth;
+    const parts: BufferGeometry[] = [
+      colliderCopy(worldBox(new Vector3(-3, d - 0.2, -2), new Vector3(3, d, 2), 1)), // basin floor
+      colliderCopy(worldBox(new Vector3(-3.1, d, -2.1), new Vector3(3.1, -0.004, -1.9), 1)),
+      colliderCopy(worldBox(new Vector3(-3.1, d, 1.9), new Vector3(3.1, -0.004, 2.1), 1)),
+      colliderCopy(worldBox(new Vector3(-3.1, d, -2.1), new Vector3(-2.9, -0.004, 2.1), 1)),
+      colliderCopy(worldBox(new Vector3(2.9, d, -2.1), new Vector3(3.1, -0.004, 2.1), 1)),
+      // the deck round it
+      colliderCopy(worldBox(new Vector3(-10, -0.2, -10), new Vector3(10, 0, -2), 1)),
+      colliderCopy(worldBox(new Vector3(-10, -0.2, 2), new Vector3(10, 0, 10), 1)),
+      colliderCopy(worldBox(new Vector3(-10, -0.2, -2), new Vector3(-3, 0, 2), 1)),
+      colliderCopy(worldBox(new Vector3(3, -0.2, -2), new Vector3(10, 0, 2), 1)),
+    ];
+    const w = new CollisionWorld();
+    w.addStatic(mergeGeometries(parts)!);
+    return w;
+  }
+
+  it('climbs out of a basin up to a step deep, head-on or at an angle, walking or wading', () => {
+    // yaw 0 faces -Z (the near wall, 2 m away); the angled tries hit the same wall obliquely
+    for (const depth of [0.1, 0.15, 0.3, 0.34]) {
+      for (const yaw of [0, 0.5, -0.9, Math.PI, Math.PI / 2 + 0.3]) {
+        for (const speedMul of [1, 0.78, 0.55]) {
+          const p = new PlayerController(basin(depth));
+          p.teleport(new Vector3(0, -depth, 0), yaw);
+          for (let i = 0; i < 60 * 3; i++) p.step(1 / 60, forward, { ...mods, speedMul });
+          const what = `depth ${depth} yaw ${yaw} speed ${speedMul}`;
+          expect(p.pos.y, what).toBeGreaterThan(-0.01);
+          expect(p.grounded, what).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('climbs a ledge in one quick step, without a lunge', () => {
+    const p = new PlayerController(basin(0.3));
+    p.teleport(new Vector3(0, -0.3, 0), 0);
+    let extra = 0;
+    for (let i = 0; i < 60 * 3; i++) {
+      const z = p.pos.z;
+      p.step(1 / 60, forward, mods);
+      const d = Math.abs(p.pos.z - z);
+      expect(d).toBeLessThan(0.11);
+      extra += Math.max(0, d - 2.15 / 60 - 1e-3);
+    }
+    // a few centimetres more than walking, all in a tenth of a second
+    expect(extra).toBeLessThan(0.2);
+    expect(p.pos.y).toBeGreaterThan(-0.01);
+  });
+
+  it('slides along a wall it walks into at an angle', () => {
+    const p = new PlayerController(room());
+    p.teleport(new Vector3(0, 0.05, -9), 0.6); // a step from the wall, heading into it at ~34°
+    for (let i = 0; i < 60 * 2; i++) p.step(1 / 60, forward, mods);
+    expect(p.pos.y).toBeLessThan(0.05);
+    expect(p.pos.z).toBeGreaterThan(-10 + 0.25);
+    // the walk's sideways part carries on along the wall (2 s at 2.15 m/s · sin 34°)
+    expect(p.pos.x).toBeLessThan(-1.8);
+  });
+
+  it('does not climb a ledge higher than a step', () => {
+    const p = new PlayerController(basin(0.45));
+    p.teleport(new Vector3(0, -0.45, 0), 0);
+    for (let i = 0; i < 60 * 3; i++) p.step(1 / 60, forward, mods);
+    expect(p.pos.y).toBeLessThan(-0.4);
+  });
+
   it('emits footsteps by distance, not by time', () => {
     const world = room();
     const p = new PlayerController(world);

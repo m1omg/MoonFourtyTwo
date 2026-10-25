@@ -2,7 +2,7 @@ import { el, wait } from './dom.ts';
 import { t, sk } from '../i18n/sk.ts';
 import type { Settings } from '../save/Settings.ts';
 import type { SaveBook, SaveData } from '../save/SaveGame.ts';
-import { BINDABLE, DEFAULT_BINDS, mouseCode, type Bindable } from '../input/InputManager.ts';
+import { BINDABLE, mouseCode, withDefaults, type Bindable } from '../input/InputManager.ts';
 import type { ItemId } from '../sim/items/items.data.ts';
 import { ITEMS } from '../sim/items/items.data.ts';
 
@@ -393,6 +393,7 @@ export class UI {
       right: t('keyRight'),
       sprint: t('keySprint'),
       crouch: t('keyCrouch'),
+      jump: t('keyJump'),
       interact: t('keyInteract'),
       drink: t('keyDrink'),
       light: t('keyLight'),
@@ -404,7 +405,7 @@ export class UI {
     let stopListening: (() => void) | null = null;
     const draw = () => {
       stopListening?.();
-      const binds = { ...DEFAULT_BINDS, ...s.keys };
+      const binds = withDefaults(s.keys);
       box.replaceChildren(el('h3', {}, t('setKeys')), el('p', { class: 'keys-hint' }, t('setKeysHint')));
       for (const a of BINDABLE) {
         const b = el('button', { class: 'btn key', type: 'button' }, keyName(binds[a]));

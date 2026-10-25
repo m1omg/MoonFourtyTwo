@@ -87,6 +87,7 @@ export class TouchControls {
       this.crouchBtn.classList.toggle('on', this.input.crouchToggled);
     });
     mk(t('touchThrow'), 'throw', 'tb-throw');
+    mk(t('touchJump'), 'jump', 'tb-jump');
     mk(t('touchPause'), 'pause', 'tb-pause');
     parent.append(this.root);
     this.setVisible(false);

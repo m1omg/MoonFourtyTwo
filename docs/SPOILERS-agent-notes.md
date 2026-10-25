@@ -15,9 +15,11 @@ work stands is in `docs/HANDOFF.md`.
 - Commit messages, PR text and owner-facing docs must be spoiler-free too. Spoilers live only
   here and in `docs/sealed-design.b64` (gzip + base64; decode it with
   `base64 -d docs/sealed-design.b64 | gunzip`).
-- As of 2026-10-10 the owner has played r1/r2 (the pub and the frozen pub), r3 and r4, and
-  nothing later. They count levels their own way: r3 is their "level 2" (the long pub) and r4
-  their "level 3" (the one with the hose).
+- As of 2026-10-25 the owner has played r1/r2 (the pub and the frozen pub), r3 and r4, and is
+  in r5 (the spa); nothing later. They count levels their own way: r3 is their "level 2" (the
+  long pub) and r4 their "level 3" (the one with the hose).
+- **Steps and jumping (2026-10-25, owner's report and request):** stuck in the r5 foot bath at
+  arrival (30 cm deep), and "add jumping". Details in "Controller: steps and jumping" below.
 - **Difficulty tuning on the owner's request (2026-10-10):**
   - r3 waitress: a little harder, patrol 1.25 → 1.45 m/s, chase 3.25 → 3.55 m/s (story 2.6 /
     1.3). A sprint (4.3 m/s) still outruns her.
@@ -312,6 +314,53 @@ cyclic cosmology turns it into the next Big Bang. The full design is in the seal
   pass the side buttons to pages at all.
 - **Grain** (`GradeEffect`): a pcg3d integer hash on `gl_FragCoord`, applied on a square-root
   scale. The sine hash on `uv * 1024` banded on some GPUs.
+
+## Controller: steps and jumping (2026-10-25)
+
+- **The step-up never really reached its 0.36 m.** It rose, probed forward and dropped back in
+  one go. On a ledge higher than ~0.24 m that drop ended beside the ledge, in its face, and the
+  step was refused. Walking head-on, even a 0.1 m sill, a 0.15 m kerb or 0.17 m steps often
+  stalled; only ramps (all the game's stairs are ramps) were safe.
+  - **r5 traps:** the foot bath you arrive in (0.3 m) held the player for good. The flooded west
+    deck (0.34 m down) was another: the pump room door sits at deck level.
+- **Fix (`src/sim/player/Controller.ts`):**
+  - The step-up drops in 11 short drops of ~4 cm.
+  - It keeps the speed-limited advance only if a 0.08 m fall from there stays above the start
+    level; otherwise it takes the whole probe (one stride of ≤ 0.1 m).
+  - A ledge's height is measured by `ledgeAhead`: a ray from above, just past the face that
+    pushed back, relative to the floor under the capsule's middle. So a capsule resting on an
+    edge can't step from partway up. Anything above `STEP_HEIGHT` is refused.
+  - A step is also tried when walking into a low face at an angle (`into > 0.35`). Before, the
+    walk slid along it.
+  - Tests: `tests/unit/controller.test.ts` covers basins 0.1/0.15/0.3/0.34 at five angles and
+    three speeds, smoothness, a slide along a tall wall, and a 0.45 m ledge that is refused.
+    The walkways test walks out of the r5 foot bath and the flooded deck.
+- **Jumping:**
+  - **Physics:** `jumpSpeed` 3.55 m/s gives a 0.32 m apex. A running jump mounts at most
+    ~0.395 m. This is deliberate: beds (0.42, r7), the stage (0.45, r7), the crates (0.45, r10),
+    a 0.45 m object by the r6 caretaker and the tub rims (0.5, r6) stay out of reach, and so do
+    kerbs (0.6) and railings. The worry is safe spots on furniture the threats' nav excludes.
+  - **When it is refused:** no jump while seated, frozen, crouched, with `forcedHeight` or with
+    `waterDepth > 0.5`. In those cases, and in menus or scenes, the key skips the line (as Space
+    always did).
+  - **Landing:** after > 0.2 s in the air at > 2 m/s it returns a footstep-like event, so a
+    noise is heard.
+  - **Input:** `jump` is bindable, default Space; Space left `FIXED_ACTIONS` and Enter is the
+    fixed skip key. Gamepad button 11 (right-stick click); touch `tb-jump` „Skok". The
+    `withDefaults` helper gives a newly added control its default key only if no saved control
+    already uses it.
+  - **Tests:** `tests/unit/jump.test.ts` checks the apex at 30/60/75/144/240 Hz, 0.38 m
+    mountable and 0.42 m not, the refusals and the key mapping.
+- **Audit:** `__mf42.reachGain(lower, higher)` flood-fills the whole chapter at two climb
+  heights and lists what only the higher one reaches. It was run from every checkpoint of
+  r1–r12 (climb 0.24→0.36, the step fix, and 0.36→0.5, a strong jump):
+  - **The step fix** opens only the r5 flooded deck and pump room (as designed), an r4 bottle
+    crate top (−2.68) and floor strips beside kerbs.
+  - **0.5** would have opened the r7 stage and beds, the r10 crates, the r6 0.45 object and the
+    tub rim. Hence the jump's limit.
+  - **Gaps:** a running jump crosses ~1.4 m. The r10 `GAPS` are half-width (walking round them
+    is the design, so hopping them is harmless) and the light path is 121 m long. r5 pools are
+    kerbed at 0.6, the lane rope's collider is 1.75 m, and r6 railings are ≥ 0.9.
 
 ## Checked and found sound (no change needed)
 

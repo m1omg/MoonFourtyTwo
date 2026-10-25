@@ -2,9 +2,20 @@ import type { NoiseEvent } from '../sim/ai/types.ts';
 import type { ItemId } from '../sim/items/items.data.ts';
 import type { Game } from './Game.ts';
 import type { Action } from '../input/actions.ts';
-import { DoubleSide } from 'three';
+import { Box3, DoubleSide } from 'three';
 import { capsuleReachable, type ReachGrid } from '../sim/physics/reach.ts';
 import type { InstancedMesh, Light, Line, Material, Mesh, Object3D, Points, Sprite, Texture } from 'three';
+
+/** A patch of floor a flood fill reached (see `reachGain`). */
+interface ReachPatch {
+  cells: number;
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+  /** Its highest floor. */
+  top: number;
+}
 
 /** Deterministic hooks for Playwright (`#…&test`). The loop is driven manually. */
 export function installTestApi(game: Game): void {
@@ -193,6 +204,69 @@ export function installTestApi(game: Game): void {
         rows.push(row);
       }
       return rows.join('\n');
+    },
+    /**
+     * Where the player could walk from here climbing `higher` but not `lower`: a flood fill over
+     * the whole chapter at both heights, as connected patches, largest first (level checks of
+     * what a higher step or a jump opens up).
+     */
+    reachGain(lower: number, higher: number, cell = 0.25): ReachPatch[] {
+      const box = new Box3();
+      const one = new Box3();
+      for (const s of game.world.statics) box.union(s.bvh.getBoundingBox(one));
+      const bounds = { x0: box.min.x, z0: box.min.z, x1: box.max.x, z1: box.max.z };
+      const far = { x: Infinity, z: Infinity };
+      const a = {} as ReachGrid;
+      const b = {} as ReachGrid;
+      capsuleReachable(game.world, game.player.pos, far, { climb: lower, cell, bounds, out: a });
+      capsuleReachable(game.world, game.player.pos, far, { climb: higher, cell, bounds, out: b });
+      const { nx, nz } = b;
+      const gain = (k: number) => b.seen[k] === 1 && a.seen[k] !== 1;
+      const mark = new Uint8Array(nx * nz);
+      const patches: ReachPatch[] = [];
+      for (let k0 = 0; k0 < nx * nz; k0++) {
+        if (!gain(k0) || mark[k0]) continue;
+        const p: ReachPatch = {
+          cells: 0,
+          x0: Infinity,
+          z0: Infinity,
+          x1: -Infinity,
+          z1: -Infinity,
+          top: -Infinity,
+        };
+        const stack = [k0];
+        mark[k0] = 1;
+        while (stack.length) {
+          const k = stack.pop()!;
+          const i = k % nx;
+          const j = (k - i) / nx;
+          const x = b.x0 + i * cell;
+          const z = b.z0 + j * cell;
+          p.cells++;
+          p.x0 = Math.min(p.x0, x);
+          p.x1 = Math.max(p.x1, x);
+          p.z0 = Math.min(p.z0, z);
+          p.z1 = Math.max(p.z1, z);
+          p.top = Math.max(p.top, b.floor[k]!);
+          for (const [di, dj] of [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+          ] as const) {
+            const ii = i + di;
+            const jj = j + dj;
+            if (ii < 0 || jj < 0 || ii >= nx || jj >= nz) continue;
+            const kk = jj * nx + ii;
+            if (!mark[kk] && gain(kk)) {
+              mark[kk] = 1;
+              stack.push(kk);
+            }
+          }
+        }
+        patches.push(p);
+      }
+      return patches.sort((p, q) => q.cells - p.cells);
     },
     /** Where an interactable is (null if there is none with that id). */
     where(id: string): [number, number, number] | null {

@@ -1,4 +1,4 @@
-# Handoff: where things stand (11 October 2026)
+# Handoff: where things stand (25 October 2026)
 
 Spoiler-free. Written so the work can carry on in a new session or from another account.
 
@@ -6,21 +6,25 @@ Spoiler-free. Written so the work can carry on in a new session or from another 
 
 - **Live game:** https://m1omg.github.io/MoonFourtyTwo/. It is built from
   `ccr-2a407a47-pkyyrs`.
-- **Last code change (2026-10-10):** `acdf52d`. On the owner's request, the long pub's pursuer
-  got a little quicker and the hose level's creature a lot easier.
-- **CI:** that commit passed the whole run: build, unit tests, deploy and all browser tests.
-  The Pages deploy succeeded too, and a local build of the same commit gives the same files
-  as the published site.
-- **Owner's last report:** after the two regulars caught you, Vierka wouldn't give you the keys.
-  It is fixed, and the owner confirmed it works.
+- **Last code change (2026-10-25):** climbing over low edges works properly, and jumping is new
+  (Space, rebindable). The owner couldn't get out of the water at the start of chapter 5 and
+  asked for jumping.
+- **Before that (2026-10-10):** `acdf52d`. On the owner's request, the long pub's pursuer got a
+  little quicker and the hose level's creature a lot easier.
+- **Owner's last reports:**
+  - Stuck in the water at the start of chapter 5: fixed.
+  - Where to go after the valves in the hose level: answered with a hint. Nothing was broken.
+    The way on is easy to miss; making it clearer was offered.
+- **Not done yet:** check that CI passed for the 25 October change, then update this file.
 - **In progress:** nothing. Every session branch is merged into `ccr-2a407a47-pkyyrs`; there
   are no open pull requests or issues.
-- **Owner's progress (2026-10-10):** the pub and the frozen pub, the long pub (r3, their
-  "level 2") and the level with the hose (r4, their "level 3"). Nothing later may be spoiled.
+- **Owner's progress (2026-10-25):** the pub and the frozen pub, the long pub (r3, their
+  "level 2"), the level with the hose (r4, their "level 3"), and now chapter 5. Nothing later
+  may be spoiled.
 - **Tests:**
-  - 107 unit tests in 24 files.
-  - Browser tests in 18 files. CI runs them on a desktop and a mobile setup: 49 runs, of which
-    47 pass and 2 are skipped by design.
+  - 117 unit tests in 25 files.
+  - 39 browser tests in 18 files, run on a desktop and a mobile setup. Two are skipped by
+    design.
 
 ## What changed in October
 

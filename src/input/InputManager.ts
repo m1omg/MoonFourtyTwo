@@ -8,6 +8,7 @@ export const BINDABLE = [
   'right',
   'sprint',
   'crouch',
+  'jump',
   'interact',
   'drink',
   'light',
@@ -25,6 +26,7 @@ export const DEFAULT_BINDS: KeyBinds = {
   right: 'KeyD',
   sprint: 'ShiftLeft',
   crouch: 'KeyC',
+  jump: 'Space',
   interact: 'KeyE',
   drink: 'KeyQ',
   light: 'KeyF',
@@ -33,7 +35,7 @@ export const DEFAULT_BINDS: KeyBinds = {
   pause: 'KeyP',
 };
 
-/** Keys that always work, whatever the bindings (arrows, Esc, Tab, numbers, Space, Enter). */
+/** Keys that always work, whatever the bindings (arrows, Esc, Tab, numbers, Enter). */
 const FIXED_ACTIONS: Record<string, Action> = {
   Digit1: 'slot1',
   Digit2: 'slot2',
@@ -46,14 +48,27 @@ const FIXED_ACTIONS: Record<string, Action> = {
   Digit9: 'slot9',
   Escape: 'pause',
   Tab: 'journal',
-  Space: 'skip',
   Enter: 'skip',
 };
 
 function keyActions(b: KeyBinds): Record<string, Action> {
   const a: Record<string, Action> = { ...FIXED_ACTIONS };
-  for (const k of ['interact', 'drink', 'light', 'throw', 'journal', 'pause'] as const) a[b[k]] = k;
+  for (const k of ['interact', 'drink', 'light', 'throw', 'journal', 'pause', 'jump'] as const)
+    if (b[k]) a[b[k]] = k;
   return a;
+}
+
+/**
+ * The saved bindings over the defaults. A control added later (jump) keeps its default key only
+ * while no saved control already uses that key; otherwise it starts unbound.
+ */
+export function withDefaults(saved: Partial<KeyBinds>): KeyBinds {
+  const b = { ...DEFAULT_BINDS, ...saved };
+  for (const a of BINDABLE) {
+    if (saved[a] !== undefined) continue;
+    if (BINDABLE.some((o) => o !== a && saved[o] === b[a])) b[a] = '';
+  }
+  return b;
 }
 
 /**
@@ -124,7 +139,7 @@ export class InputManager {
 
   /** Moves controls to other keys (missing entries keep their defaults). */
   setBinds(b: Partial<KeyBinds>): void {
-    this.binds = { ...DEFAULT_BINDS, ...b };
+    this.binds = withDefaults(b);
     this.keyActions = keyActions(this.binds);
     this.keys.clear();
   }
@@ -303,6 +318,7 @@ export class InputManager {
     if (edge(9)) this.press('pause');
     if (edge(8)) this.press('journal');
     if (edge(7)) this.press('throw');
+    if (edge(11)) this.press('jump');
     this.gpSprint = !!b[10] || !!b[6];
     this.gpCrouch = false;
     this.gpPrev = b;
@@ -352,6 +368,8 @@ export class InputManager {
     const a = this.keyActions[e.code];
     if (!this.enabled) {
       if (a === 'pause' || a === 'skip') this.latched.add(a);
+      // in a menu or a cutscene the jump key skips a line, as Space always has
+      else if (a === 'jump') this.latched.add('skip');
       return;
     }
     if (e.repeat) return;
@@ -395,6 +413,7 @@ export class InputManager {
     if (!this.enabled) {
       // like the keyboard: only pause and skip get through a menu or a cutscene
       if (a === 'pause' || a === 'skip') this.latched.add(a);
+      else if (a === 'jump') this.latched.add('skip');
       return;
     }
     if (!this.pointerLocked) {

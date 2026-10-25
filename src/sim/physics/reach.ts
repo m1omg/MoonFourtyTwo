@@ -13,6 +13,8 @@ export interface ReachOptions {
   margin?: number;
   /** How close to `to` counts as arriving (m). */
   within?: number;
+  /** Search this rectangle instead of the points and the margin (level checks). */
+  bounds?: { x0: number; z0: number; x1: number; z1: number };
   /** Diagnostics: receives the grid. */
   out?: ReachGrid;
 }
@@ -47,10 +49,16 @@ export function capsuleReachable(
   const climb = opts.climb ?? 0.36;
   const margin = opts.margin ?? 4;
   const within = opts.within ?? 0.25;
-  const x0 = Math.min(from.x, to.x) - margin;
-  const z0 = Math.min(from.z, to.z) - margin;
-  const nx = Math.ceil((Math.max(from.x, to.x) + margin - x0) / cell) + 1;
-  const nz = Math.ceil((Math.max(from.z, to.z) + margin - z0) / cell) + 1;
+  const bx = opts.bounds ?? {
+    x0: Math.min(from.x, to.x) - margin,
+    z0: Math.min(from.z, to.z) - margin,
+    x1: Math.max(from.x, to.x) + margin,
+    z1: Math.max(from.z, to.z) + margin,
+  };
+  const x0 = bx.x0;
+  const z0 = bx.z0;
+  const nx = Math.ceil((bx.x1 - x0) / cell) + 1;
+  const nz = Math.ceil((bx.z1 - z0) / cell) + 1;
   const floor = new Float32Array(nx * nz);
   // 0 not tested yet, 1 open, 2 shut
   const state = new Uint8Array(nx * nz);
@@ -88,7 +96,7 @@ export function capsuleReachable(
   if (opts.out) Object.assign(opts.out, { x0, z0, nx, nz, state, seen, floor });
   const si = Math.round((from.x - x0) / cell);
   const sj = Math.round((from.z - z0) / cell);
-  if (!open(si, sj, from.y)) return false;
+  if (si < 0 || sj < 0 || si >= nx || sj >= nz || !open(si, sj, from.y)) return false;
   const queue: number[] = [sj * nx + si];
   seen[sj * nx + si] = 1;
   while (queue.length) {

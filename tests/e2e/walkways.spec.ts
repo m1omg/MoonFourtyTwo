@@ -85,3 +85,54 @@ test('the epilogue: from the square in through the door to the seat', async ({ p
   expect(await a.reachable(3.0, 1.95, 5)).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test('chapter 5: you walk out of the water you arrive in, up out of the flooded deck, and jump', async ({
+  page,
+}, info) => {
+  test.skip(info.project.name !== 'desktop');
+  test.setTimeout(300_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const a = await open(page, 'r5');
+  await a.sim(1);
+  /** Walks (the real controller, no teleport) for `secs`, in steps so the scripts run on. */
+  const walk = async (x: number, y: number, z: number, yaw: number, secs: number) => {
+    await page.evaluate(
+      ([x, y, z, yaw]) => (window as unknown as W).__mf42.teleport(x!, y!, z!, yaw),
+      [x, y, z, yaw],
+    );
+    await a.sim(0.3);
+    await page.evaluate(() =>
+      (window as unknown as { __mf42: { move(x: number, y: number): void } }).__mf42.move(0, 1),
+    );
+    for (let i = 0; i < secs * 4; i++) await a.sim(0.25);
+    await page.evaluate(() =>
+      (window as unknown as { __mf42: { move(x: number, y: number): void } }).__mf42.move(0, 0),
+    );
+    await a.sim(0.1);
+    return ((await a.info()) as unknown as { pos: number[] }).pos;
+  };
+  // the foot bath is 30 cm deep: out of it in every direction, also at an angle
+  for (const yaw of [0, Math.PI / 2, Math.PI, -Math.PI / 2, 0.7]) {
+    const p = await walk(-5, -0.3, 13.2, yaw, 2.5);
+    expect(p[1], `yaw ${yaw}`).toBeGreaterThan(-0.01);
+  }
+  // the flooded deck is 34 cm down: up through the door at its end, and back onto the dry deck
+  expect((await walk(-17, -0.34, -23, Math.PI / 2, 3))[0]).toBeLessThan(-20.3);
+  expect((await walk(-16, -0.34, -20, Math.PI, 3))[1]).toBeGreaterThan(-0.01);
+  // the pool's edge (higher than a step) still keeps you out of the water
+  const kerb = await walk(0, 0, -15, 0, 3);
+  expect(kerb[1]).toBeGreaterThan(-0.01);
+  expect(kerb[2]).toBeGreaterThan(-17);
+  // the jump key hops (and comes down again); a jump at the edge doesn't get you over it either
+  await page.evaluate(() =>
+    (window as unknown as { __mf42: { press(a: string): void } }).__mf42.press('jump'),
+  );
+  await a.sim(0.15);
+  expect(((await a.info()) as unknown as { pos: number[] }).pos[1]).toBeGreaterThan(0.2);
+  await a.sim(1);
+  const after = ((await a.info()) as unknown as { pos: number[] }).pos;
+  expect(after[1]).toBeLessThan(0.01);
+  expect(after[2]).toBeGreaterThan(-17);
+  expect(errors).toEqual([]);
+});

@@ -28,6 +28,8 @@ export interface ControllerConfig {
   crouchSpeed: number;
   groundAccel: number;
   gravity: number;
+  /** Take-off speed of a jump (m/s): a hop of about 0.32 m, onto nothing higher than ~0.4 m. */
+  jumpSpeed: number;
 }
 
 export const DEFAULT_CONTROLLER: ControllerConfig = {
@@ -40,6 +42,7 @@ export const DEFAULT_CONTROLLER: ControllerConfig = {
   crouchSpeed: 1.05,
   groundAccel: 12,
   gravity: 22,
+  jumpSpeed: 3.55,
 };
 
 export interface FootstepEvent {
@@ -66,7 +69,13 @@ const _up = new Vector3(0, 1, 0);
 const _start = new Vector3();
 const _try = new Vector3();
 const _push = new Vector3();
+const _alt = new Vector3();
+const _fall = new Vector3();
+const _ray = new Vector3();
+const _down = new Vector3(0, -1, 0);
 const STEP_HEIGHT = 0.36;
+/** The step-up comes down in this many drops of ~4 cm. */
+const STEP_DROPS = 11;
 
 /** Kinematic first-person capsule controller. Runs in fixed sim steps only. */
 export class PlayerController {
@@ -93,6 +102,10 @@ export class PlayerController {
   noclip = false;
   /** Overrides the capsule height (e.g. sitting). */
   forcedHeight: number | null = null;
+  /** A jump asked for, taken on the next step. */
+  private jumpQueued = false;
+  /** Seconds since the feet left the ground (a landing after a real fall is heard). */
+  private airTime = 0;
 
   constructor(
     private readonly world: CollisionWorld,
@@ -112,6 +125,14 @@ export class PlayerController {
 
   eyeHeight(height = this.height): number {
     return height - this.cfg.eyeBelowTop;
+  }
+
+  /** Jumps on the next step if standing on something and free to move; false if not. */
+  jump(): boolean {
+    if (!this.grounded || this.frozen || this.crouched || this.forcedHeight !== null || this.noclip)
+      return false;
+    this.jumpQueued = true;
+    return true;
   }
 
   step(dt: number, input: InputSnapshot, mods: MoveModifiers): FootstepEvent | null {
@@ -153,6 +174,9 @@ export class PlayerController {
     this.vel.z = damp(this.vel.z, _wish.z, accel, dt);
     if (this.noclip) {
       this.vel.y = 0;
+    } else if (this.jumpQueued) {
+      this.vel.y = c.jumpSpeed;
+      this.grounded = false;
     } else if (this.grounded) {
       this.vel.y = -2.5; // keeps the capsule glued to ramps and stairs
     } else {
@@ -160,7 +184,9 @@ export class PlayerController {
       if (this.vel.y < -30) this.vel.y = -30;
     }
 
+    this.jumpQueued = false;
     const wasGrounded = this.grounded;
+    const fallSpeed = -this.vel.y;
     _start.copy(this.pos);
     this.pos.addScaledVector(this.vel, dt);
 
@@ -169,12 +195,25 @@ export class PlayerController {
       this.grounded = _res.maxNormalY > 0.55;
       const pushLen = _res.push.length();
       _push.copy(_res.push);
-      // Step up onto low ledges (kerbs, platforms) when blocked while walking.
+      // Step up onto low ledges (kerbs, platforms) when blocked while walking, or when walking
+      // into a low one at an angle (otherwise the walk slides along it).
       const wishLen = Math.hypot(_wish.x, _wish.z);
       const wantH = Math.hypot(this.vel.x, this.vel.z) * dt;
       const gotH = Math.hypot(this.pos.x - _start.x, this.pos.z - _start.z);
-      if (wasGrounded && wishLen > 0.1 && gotH < Math.max(wantH, 1e-4) * 0.6) {
-        const probe = Math.max(wantH, 0.1);
+      const blocked = gotH < Math.max(wantH, 1e-4) * 0.6;
+      const faceH = Math.hypot(_push.x, _push.z);
+      // 1 when the walk meets the face that pushed back head-on, 0 when it runs along it
+      const into =
+        faceH > 1e-6 && wishLen > 1e-6 ? -(_push.x * _wish.x + _push.z * _wish.z) / (faceH * wishLen) : 0;
+      const ledge = wasGrounded && wishLen > 0.1 && (blocked || into > 0.35) ? this.ledgeAhead(wishLen) : 0;
+      if (
+        wasGrounded &&
+        wishLen > 0.1 &&
+        ledge <= STEP_HEIGHT + 0.01 &&
+        (blocked || (into > 0.35 && ledge > 0.01))
+      ) {
+        // far enough into the ledge, also at an angle
+        const probe = Math.max(wantH, 0.1 / Math.max(into, 0.5));
         _try.copy(_start);
         _try.y += STEP_HEIGHT;
         this.collide(_try);
@@ -183,14 +222,30 @@ export class PlayerController {
           _try.x += (_wish.x / wishLen) * probe;
           _try.z += (_wish.z / wishLen) * probe;
           this.collide(_try);
-          _try.y -= STEP_HEIGHT + 0.08;
-          this.collide(_try);
+          // Come down in short drops, so the capsule settles on the ledge's edge. In one long
+          // drop it ended beside a ledge higher than ~0.24 m, in its face, and the step failed.
+          // (no use when the raised probe got no further than the walk: a wall, not a ledge)
+          const past = Math.hypot(_try.x - _start.x, _try.z - _start.z) > gotH + 0.02;
+          let landed = false;
+          for (let i = 0; past && i < STEP_DROPS && !landed; i++) {
+            _try.y -= (STEP_HEIGHT + 0.08) / STEP_DROPS;
+            this.collide(_try);
+            landed = _res.maxNormalY > 0.55;
+          }
           const rise = _try.y - _start.y;
           const stepH = Math.hypot(_try.x - _start.x, _try.z - _start.z);
-          if (_res.maxNormalY > 0.55 && stepH > gotH + 0.02 && rise > 0.01 && rise <= STEP_HEIGHT + 0.01) {
+          if (landed && stepH > gotH + 0.02 && rise > 0.01 && rise <= STEP_HEIGHT + 0.01) {
             // keep the real (speed-limited) horizontal advance, but take the raised height
             const k = Math.min(1, Math.max(wantH, 1e-4) / stepH);
-            this.pos.set(_start.x + (_try.x - _start.x) * k, _try.y, _start.z + (_try.z - _start.z) * k);
+            _alt.set(_start.x + (_try.x - _start.x) * k, _try.y, _start.z + (_try.z - _start.z) * k);
+            // ...unless that leaves the capsule on the ledge's very edge, where it would slide back
+            // off (a short fall from there doesn't stay up on the ledge): then take the whole
+            // probe, a few centimetres more, once
+            _fall.copy(_alt);
+            _fall.y -= 0.08;
+            this.collide(_fall);
+            const stays = _res.maxNormalY > 0.55 && _fall.y > _start.y + 0.01;
+            this.pos.copy(stays ? _alt : _try);
             this.collide(this.pos);
             this.grounded = true;
             _push.set(0, 0, 0);
@@ -223,6 +278,18 @@ export class PlayerController {
       if (this.pos.y < -60) this.vel.set(0, 0, 0);
     }
 
+    // Landing after a jump or a fall: heard like a heavy step.
+    const air = this.airTime;
+    this.airTime = this.grounded ? 0 : this.airTime + dt;
+    if (this.grounded && !wasGrounded && air > 0.2 && fallSpeed > 2) {
+      return {
+        position: this.pos.clone(),
+        loudness: Math.min(1.5, 0.35 + fallSpeed * 0.12) * SURFACE_LOUDNESS[this.surface],
+        surface: this.surface,
+        foot: 0,
+      };
+    }
+
     // Gait / footsteps.
     const hx = this.pos.x - this.prevPos.x;
     const hz = this.pos.z - this.prevPos.z;
@@ -253,6 +320,34 @@ export class PlayerController {
     _seg.end.set(feet.x, feet.y + Math.max(this.height - r, r + 0.01), feet.z);
     this.world.resolveCapsule(_seg, r, _res);
     feet.set(_seg.start.x, _seg.start.y - r, _seg.start.z);
+  }
+
+  /**
+   * How high the ledge that stopped the walk is, above the floor: measured from above, just past
+   * the face that pushed back (0 when nothing is found there). Keeps ledges higher than a step
+   * out of reach: resting on such a ledge's edge, the capsule's round bottom sits lower than its
+   * top, so the height it climbs to looks like a step.
+   */
+  private ledgeAhead(wishLen: number): number {
+    let nx = -_push.x;
+    let nz = -_push.z;
+    let hl = Math.hypot(nx, nz);
+    if (hl < 1e-6) {
+      nx = _wish.x;
+      nz = _wish.z;
+      hl = wishLen;
+    }
+    // measured from the floor under the capsule's middle: resting on a ledge's edge (landed
+    // there from a jump, say) the feet are partway up it, and a step from there would mount
+    // more than a step
+    _ray.set(_start.x, _start.y + 0.3, _start.z);
+    const under = this.world.raycast(_ray, _down, 1.3);
+    const base = under === Infinity ? _start.y : Math.min(_start.y, _ray.y - under);
+    const reach = this.cfg.radius + 0.03;
+    const above = STEP_HEIGHT + 0.15;
+    _ray.set(_start.x + (nx / hl) * reach, _start.y + above, _start.z + (nz / hl) * reach);
+    const d = this.world.raycast(_ray, _down, above + (_start.y - base));
+    return d === Infinity ? 0 : _ray.y - d - base;
   }
 
   private hasHeadroom(): boolean {

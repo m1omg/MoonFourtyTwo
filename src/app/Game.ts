@@ -15,7 +15,7 @@ import { Scope } from '../core/scope.ts';
 import { clamp, damp } from '../core/damp.ts';
 import { comfort } from '../render/comfort.ts';
 import { MusicBox, TUNES } from '../audio/procedural/musicbox.ts';
-import { DEFAULT_BINDS, InputManager, type Bindable } from '../input/InputManager.ts';
+import { InputManager, withDefaults, type Bindable } from '../input/InputManager.ts';
 import type { InputSnapshot } from '../input/actions.ts';
 import { TouchControls } from '../input/touch/TouchControls.ts';
 import { UI, keyName } from '../ui/UI.ts';
@@ -1029,6 +1029,11 @@ export class Game {
         case 'skip':
           this.requestSkip();
           break;
+        case 'jump':
+          // where you can't jump (seated, wading deep, held by a scene) it skips a line, as
+          // Space always did
+          if (this.seated || this.waterDepth > 0.5 || !this.player.jump()) this.requestSkip();
+          break;
         case 'interact':
           if (!this.interactions.use()) this.requestSkip();
           break;
@@ -1063,7 +1068,7 @@ export class Game {
 
   /** The key an action is bound to, as the player knows it (for hints: „klávesom Q"). */
   keyLabel(action: Bindable): string {
-    return keyName(this.settings.keys[action] ?? DEFAULT_BINDS[action]);
+    return keyName(withDefaults(this.settings.keys)[action]);
   }
 
   /** Water depth at the player's feet (0 on dry ground), from the reality. */
