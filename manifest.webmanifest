@@ -1,0 +1,10 @@
+{
+  "name": "Ešte jedno",
+  "short_name": "Ešte jedno",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0907",
+  "theme_color": "#0b0907",
+  "lang": "sk"
+}
