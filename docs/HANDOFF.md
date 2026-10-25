@@ -15,7 +15,8 @@ Spoiler-free. Written so the work can carry on in a new session or from another 
   - Stuck in the water at the start of chapter 5: fixed.
   - Where to go after the valves in the hose level: answered with a hint. Nothing was broken.
     The way on is easy to miss; making it clearer was offered.
-- **Not done yet:** check that CI passed for the 25 October change, then update this file.
+- **CI:** run 42 (`c7f7f9d`) passed everything: build, unit tests, deploy and all browser tests
+  on desktop and mobile. The browser tests now run on Ubuntu 24.04 (open item 6).
 - **In progress:** nothing. Every session branch is merged into `ccr-2a407a47-pkyyrs`; there
   are no open pull requests or issues.
 - **Owner's progress (2026-10-25):** the pub and the frozen pub, the long pub (r3, their
